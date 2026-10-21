@@ -1,0 +1,41 @@
+@chapter REFERENCES
+@refs
+Abdulganiyu, O. H., Ait Tchakoucht, T., & Saheed, Y. K. (2023). A systematic literature review for network intrusion detection system (IDS). International Journal of Information Security, 22(5). https://doi.org/10.1007/s10207-023-00682-2
+Albasheer, H., Md Siraj, M., Mubarakali, A., Elsier Tayfour, O., Salih, S., Hamdan, M., Khan, S., Zainal, A., & Kamarudeen, S. (2022). Cyber-attack prediction based on network intrusion detection systems for alert correlation techniques: A survey. Sensors, 22(4), 1494. https://doi.org/10.3390/s22041494
+Alhuzali, A. (2025). LLM-powered threat intelligence: A retrieval-augmented generation approach for cyber attack investigation. PeerJ Computer Science, 11, e3371. https://doi.org/10.7717/peerj-cs.3371
+Ban, T., Samuel, N., Takahashi, T., & Inoue, D. (2021). Combat security alert fatigue with AI-assisted techniques. In Cyber Security Experimentation and Test Workshop (CSET '21). Association for Computing Machinery. https://doi.org/10.1145/3474718.3474723
+Bhusal, D., & Rastogi, N. (2022). SoK: Modeling explainability in security monitoring for trust, privacy, and interpretability (arXiv:2210.17376). arXiv. https://arxiv.org/abs/2210.17376
+Chidukwani, A., Zander, S., & Koutsakis, P. (2022). A survey on the cyber security of small-to-medium businesses: Challenges, research focus and recommendations. IEEE Access, 10, 85701–85719. https://doi.org/10.1109/ACCESS.2022.3197899
+Diana, L., Dini, P., & Paolini, D. (2025). Overview on intrusion detection systems for computers networking security. Computers, 14(3), 87. https://doi.org/10.3390/computers14030087
+Elastic. (2024). Elastic Security. https://www.elastic.co/security
+Es, S., James, J., Espinosa-Anke, L., & Schockaert, S. (2024). RAGAS: Automated evaluation of retrieval augmented generation. In Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics: System Demonstrations. Association for Computational Linguistics.
+FIRST. (2023). Common Vulnerability Scoring System version 4.0: Specification document. Forum of Incident Response and Security Teams. https://www.first.org/cvss/
+Gelman, B., Taoufiq, S., Vörös, T., & Berlin, K. (2023). That escalated quickly: An ML framework for alert prioritization (arXiv:2302.06648). arXiv. https://arxiv.org/abs/2302.06648
+Ghazi, D. S., Hamid, H. S., Zaiter, M. J., & Behadili, A. S. G. (2024). Snort versus Suricata in intrusion detection. Iraqi Journal of Information and Communications Technology, 7(2). https://doi.org/10.31987/ijict.7.2.290
+Hdidou, R., & El Alami, M. (2024). Intrusion detection systems in Internet of Things: A recent state of the art. Journal of Theoretical and Applied Information Technology, 102(1).
+Ish, J. (2024). EveBox: Web-based event viewer for Suricata [Software documentation]. https://docs.evebox.org/en/latest/
+ISO/IEC. (2022). ISO/IEC 27001:2022 Information security, cybersecurity and privacy protection — Information security management systems — Requirements. International Organization for Standardization.
+Jalalvand, F., Baruwal Chhetri, M., Nepal, S., & Paris, C. (2024). Alert prioritization in security operations centres: A systematic survey on criteria and methods. ACM Computing Surveys, 57(2), Article 42. https://doi.org/10.1145/3695462
+Kaur, R., Gabrijelčič, D., & Klobučar, T. (2023). Artificial intelligence for cybersecurity: Literature review and future research directions. Information Fusion, 97, 101804. https://doi.org/10.1016/j.inffus.2023.101804
+Kotenko, I., Gaifulina, D., & Zelichenok, I. (2022). Systematic literature review of security event correlation methods. IEEE Access, 10. https://doi.org/10.1109/ACCESS.2022.3168976
+Lewis, J. R. (2018). The System Usability Scale: Past, present, and future. International Journal of Human–Computer Interaction, 34(7), 577–590. https://doi.org/10.1080/10447318.2018.1455307
+Liu, Y., Shu, X., Sun, Y., Jang, J., & Mittal, P. (2022). RAPID: Real-time alert investigation with context-aware prioritization for efficient threat discovery. In Annual Computer Security Applications Conference (ACSAC '22). Association for Computing Machinery. https://doi.org/10.1145/3564625.3567993
+Manzoor, J., Waleed, A., Jamali, A. F., & Masood, A. (2024). Cybersecurity on a budget: Evaluating security and performance of open-source SIEM solutions for SMEs. PLOS ONE, 19(3), e0301183. https://doi.org/10.1371/journal.pone.0301183
+Mattila, T. (2020). Integration of Arctic Node threat intelligence sharing platform with Suricata [Master's thesis, University of Oulu]. University of Oulu.
+MITRE Corporation. (2025). MITRE ATT&CK: Enterprise matrix. https://attack.mitre.org/
+Munir, R. (2014). A quantitative security assessment of modern cyber attacks: A framework for quantifying enterprise security risk level through system's vulnerability analysis by detecting known and unknown threats [Doctoral thesis, University of Bradford]. Bradford Scholars. http://hdl.handle.net/10454/14251
+Moustafa, N., & Slay, J. (2015). UNSW-NB15: A comprehensive data set for network intrusion detection systems (UNSW-NB15 network data set). In 2015 Military Communications and Information Systems Conference (MilCIS) (pp. 1–6). IEEE. https://doi.org/10.1109/MilCIS.2015.7348942
+Nelson, A., Rekhi, S., Souppaya, M., & Scarfone, K. (2025). Incident response recommendations and considerations for cybersecurity risk management: A CSF 2.0 community profile (NIST Special Publication 800-61 Rev. 3). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-61r3
+NIST. (2012). Guide for conducting risk assessments (NIST Special Publication 800-30 Rev. 1). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-30r1
+Open Information Security Foundation. (2024). Eve JSON output. In Suricata user guide. https://docs.suricata.io/en/latest/output/eve/eve-json-output.html
+OWASP Foundation. (2025). OWASP Application Security Verification Standard 5.0. https://owasp.org/www-project-application-security-verification-standard/
+OWASP Foundation. (n.d.). OWASP risk rating methodology. https://owasp.org/www-community/OWASP_Risk_Rating_Methodology
+Pressman, R. S., & Maxim, B. R. (2020). Software engineering: A practitioner's approach (9th ed.). McGraw-Hill Education.
+Raharjo, D. H. K., & Salman, M. (2023). Analyzing Suricata alert detection performance issues based on active indicator of compromise rules. Jurnal Teknik Informatika (JUTIF), 4(3), 601–610. https://doi.org/10.52436/1.jutif.2023.4.3.1013
+Sebastian, A., Praveen, B. M., & Priscila, S. S. (2026). X-Guard: Advancing intrusion detection with explainable AI for transparent cybersecurity decision-making. AVE Trends in Intelligent Computing Systems, 3(1).
+Sikos, L. F. (2020). Packet analysis for network forensics: A comprehensive survey. Forensic Science International: Digital Investigation, 32, 200892. https://doi.org/10.1016/j.fsidi.2019.200892
+Tahir, M., Wahyuningsih, U., Pratama, M. I. P., & Effindi, M. A. (2024). Development of network security using a Suricata-based intrusion prevention system against distributed denial of service. Innovation in Research of Informatics (INNOVATICS), 6(2), 41–48.
+Temoshok, D., Fenton, J. L., Choong, Y.-Y., Lefkovitz, N., Regenscheid, A., Galluzzo, R., & Richer, J. P. (2025). Digital identity guidelines: Authentication and authenticator management (NIST Special Publication 800-63B-4). National Institute of Standards and Technology. https://doi.org/10.6028/NIST.SP.800-63b-4
+Tetteh, A. K. (2024). Cybersecurity needs for SMEs. Issues in Information Systems, 25(1), 235–246. https://doi.org/10.48009/1_iis_2024_120
+Waleed, A., Jamali, A. F., & Masood, A. (2022). Which open-source IDS? Snort, Suricata or Zeek. Computer Networks, 213, 109116. https://doi.org/10.1016/j.comnet.2022.109116
+Wazuh Inc. (2024). Wazuh documentation: Getting started with Wazuh. https://documentation.wazuh.com/current/getting-started/index.html
