@@ -1,0 +1,204 @@
+@chapter CHAPTER 4: DESIGN AND DEVELOPMENT
+@h2 4.1 Introduction
+This chapter presents the design and development of NetSeer following the user design and construction phases of the RAD model described in Chapter 3. It explains how the architecture was refined, how each stage of Alert-Context Processing (ACP) is implemented, how the AI-assisted interpretation module grounds and verifies its output, how data is stored, how the web dashboard presents results to non-expert users, and how NetSeer itself is secured. The chapter ends with the development progress of the prototype at the time of this report.
+@h2 4.2 Refined System Architecture
+The architecture in Figure 3.2 was refined during the user design phase into a modular pipeline in which each component has a single responsibility and communicates through the SQLite database. The main refinements are the adoption of FastAPI instead of Flask, because asynchronous request handling suits long-running analyses and slow language-model calls and because Pydantic schemas can validate both the evidence package and the language-model output; the addition of a dedicated risk scorer and an output verifier; and the use of Suricata's own protocol logs as the main source of passive device context. Table 4.1 maps the implemented modules to the ACP stages defined in Section 2.3.5.
+@table Table 4.1: NetSeer Modules and their ACP Stages | 18,30,52
+Module | ACP Stage | Responsibility
+Ingest | Input (offline) | Validates one or more uploaded PCAP files, merges files uploaded together, runs Suricata in offline mode and tracks the analysis.
+Live | Input (real-time) | Detects the mirror and LAN interfaces, waits until both are connected and traffic is observed, runs live capture and passes new eve.json records to the pipeline.
+Logger | 1. Normalisation; 2. Preliminary enrichment | Parses eve.json into a common alert schema, keeps the raw record, adds network, device and application context, and builds the device inventory.
+Contextor | 3. Aggregation; 4. Correlation; 5. Incident enrichment | Groups repeated alerts, links related groups into possible incidents and attaches device, MITRE ATT&CK and category context.
+Scorer | 6. Risk prioritisation | Computes the incident risk score with a stored factor breakdown, the device risk and the network health score.
+Prompt Maker and RAG | 7. Evidence package | Builds the evidence package with identified facts, retrieves knowledge and renders the prompt.
+LLM Caller | Interpretation | Sends the prompt to the local model through Ollama (or an optional cloud model) and requests structured JSON output.
+Verifier | Validation | Checks the explanation against the evidence package and flags unsupported claims before display.
+Web Dashboard | Presentation | FastAPI routes, Jinja2 pages and Chart.js charts for the dashboard pages.
+@endtable
+@figure assets/fig4_1_acp.png | Figure 4.1: Alert-Context Processing and Interpretation Pipeline | 6.2
+@h2 4.3 Data Acquisition
+NetSeer supports two analysis modes, which the user chooses on the Network page. In offline mode, the user uploads one or more PCAP or PCAPNG files. The ingest module checks the signature and size of each file, stores the files in a directory for the analysis, and merges files uploaded together in chronological order with mergecap, so that activity spanning several files can still be correlated. Suricata then processes the capture in offline mode with a NetSeer-specific configuration. Checksum validation is disabled for offline analysis because captures taken on hosts with network-card offloading otherwise contain invalid checksums that suppress detection. Each offline analysis moves through the states queued, running Suricata, processing, awaiting device attribution, done or failed, which the dashboard displays as progress.
+Suricata is configured with the Emerging Threats Open ruleset and the abuse.ch rulesets, managed with suricata-update. Besides alerts, the eve.json output is configured to include anomaly, flow, DNS, HTTP, TLS, DHCP, SSH and SMB records together with Ethernet (MAC) addresses. These protocol records provide passive context, such as host names from DHCP and services from flows, without a separate packet parser. Many Emerging Threats rules also carry metadata such as signature severity and MITRE ATT&CK tactic and technique identifiers, which NetSeer reads directly.
+In real-time mode, the user selects two network interfaces: the mirror interface, which is connected to the switch mirror (SPAN) port, has no IP address and receives a copy of all traffic, and the LAN interface through which the dashboard is reached. Because capture cannot begin until the hardware is ready, a real-time session passes through the states waiting for interfaces (both links must be up), waiting for traffic (the packet counter of the mirror interface must increase), ready (the user confirms), running and stopped. While running, Suricata captures from the mirror interface in AF_PACKET mode inside a dedicated system service that holds only the packet-capture capabilities, so the web application never runs with administrative privileges. A tailer reads new eve.json records from a saved file offset at a configurable interval (30 seconds by default) and passes them through the same ACP stages incrementally. If a link drops, the session returns to waiting for interfaces and keeps the data already collected. Every real-time session is stored as a separate analysis, even when it monitors the same network. Both offline and real-time analyses receive automatic names, which the user can change, and remain available for browsing.
+@h2 4.4 Alert-Context Processing Implementation
+@h3 4.4.1 Normalisation
+The logger reads eve.json line by line and converts each alert record into the normalised alert schema shown in Table 4.2. The original JSON record is stored unchanged alongside the normalised fields so that every later result can be traced back to the raw evidence. Missing fields are stored as empty values and are presented as unknown rather than guessed.
+@table Table 4.2: Normalised Alert Schema | 26,74
+Field | Description
+ts | Event timestamp converted to a single ISO 8601 format.
+flow_id | Suricata flow identifier linking the alert to its flow and protocol records.
+src_ip, src_port, dest_ip, dest_port, proto, app_proto | Network 5-tuple and detected application protocol.
+sid, signature, category, severity | Rule identifier, rule message, classification and Suricata severity (1 = highest).
+sig_severity, mitre_tactic, mitre_technique | Values taken from the rule metadata where available.
+direction | External-to-internal, internal-to-external, internal-to-internal or external-to-external, based on private address ranges and the configured local networks.
+raw_json | The original eve.json record, kept for traceability.
+@endtable
+@h3 4.4.2 Preliminary Enrichment
+Preliminary enrichment adds context at the alert level. Network context is the traffic direction and whether each address belongs to the local network. Device context is collected for every internal address seen in any eve.json record: the MAC address from the Ethernet fields, the vendor obtained by looking up the first three bytes of the MAC address in the IEEE organisationally unique identifier (OUI) registry, the host name from DHCP records, and the services observed when the device is the destination of a flow. Application context, such as DNS query names, HTTP host names and TLS server names, is linked to alerts through the flow identifier. Threat-intelligence enrichment from AbuseIPDB and VirusTotal is optional, applies only to external addresses, is cached and rate-limited, and is enabled only when the user supplies their own API keys. All context that cannot be determined from the capture is recorded as unknown.
+After each offline analysis, and whenever a new device appears during a real-time session, the user is asked to assign each discovered device one of seven types: server or network-attached storage, network device (router, switch or access point), workstation or laptop, phone or tablet, Internet-of-Things device (printer, camera or smart device), guest device, or unknown. The type sets the asset criticality factor used for impact in Section 4.4.6, a simplified form of the environmental and asset context described in CVSS v4.0 (FIRST, 2023). Unattributed devices keep the neutral value of the unknown type, and changing a type re-scores the affected incidents immediately.
+@h3 4.4.3 Aggregation
+Alerts are sorted by time and grouped by the key source address, destination address, rule identifier, protocol and destination port. A new group is started when the gap since the previous matching alert exceeds a configurable window, which is 300 seconds by default. Each group stores its first-seen and last-seen times, the alert count, the highest severity, a representative alert and the identifiers of all member alerts. Consistent with Section 2.3.3, aggregation is reported as a reduction in alert volume and not as false-positive removal.
+@h3 4.4.4 Correlation
+Alert groups are linked into possible incidents by the deterministic rules in Table 4.3, applied within a configurable correlation window of 30 minutes. The rules follow the similarity- and knowledge-based correlation approaches described by Albasheer et al. (2022). Linked groups are merged using a union-find structure, and every incident records the rule that created it so that the dashboard and the AI explanation can state why alerts were grouped together. Incidents are always presented as possible incidents, never as confirmed attacks.
+@table Table 4.3: Correlation Rules | 12,38,50
+Rule | Condition | Typical Meaning
+R1 | Same source and destination pair with different rule identifiers. | Several stages of activity between the same two hosts, such as enumeration followed by an exploit attempt.
+R2 | One source and at least five distinct destinations. | Network sweep or scan.
+R3 | At least five distinct sources and one destination. | Brute-force or denial-of-service activity against one host.
+R4 | Groups that follow a MITRE ATT&CK tactic progression, such as Discovery followed by Initial Access or Command and Control. | Possible multi-step attack; gives the highest correlation strength.
+Single | No rule applies. | The alert group forms its own incident.
+@endtable
+@h3 4.4.5 Incident-Level Enrichment
+Each incident is enriched with the devices involved and their types, the distinct alert categories, the MITRE ATT&CK tactics and techniques taken from rule metadata, and, when enabled, threat-intelligence results for external addresses. A plain-language title is generated from a template according to the correlation rule, for example "Possible scan from 10.0.0.5 against 12 hosts", so that the incident list is readable before any AI explanation is generated.
+@h3 4.4.6 Risk Prioritisation
+Risk prioritisation in NetSeer uses a hybrid model drawn from three sources. The structure of each incident rating is adapted from the OWASP Risk Rating Methodology (OWASP Foundation, n.d.), which rates likelihood and impact factors on a scale of 0 to 9, converts the averages into levels and combines the levels through a severity matrix. Munir (2014) applied this methodology to an enterprise network, where the factors were chosen manually by an analyst. In NetSeer every factor is derived automatically from the evidence collected by ACP, so the rating is repeatable and requires no security expertise from the user. The numeric score follows the likelihood-and-impact risk model of NIST SP 800-30 Rev. 1 (NIST, 2012), and device and network values use the probabilistic aggregation proposed by Munir (2014). Tables 4.4 and 4.5 define the likelihood and impact factors.
+@table Table 4.4: Likelihood Factors | 22,20,58
+Factor | Source Evidence | Values (0 to 9)
+L1 Detection confidence | Rule priority or signature severity | Priority 1, 2, 3 and 4 map to 9, 6, 3 and 1; where the rule metadata gives a signature severity, Critical, Major, Minor and Informational map to 9, 7, 4 and 1 and take precedence.
+L2 Activity volume | Number of alerts | min(9, 3 × log10(1 + number of alerts)), so that about 1,000 alerts give the maximum.
+L3 Correlation strength | Correlation rule | Single 2, R1 6, R2 5, R3 7, R4 9.
+L4 Exposure | Traffic direction | External to internal 9, internal to external 7, internal to internal 6, external to external 1.
+L5 Threat reputation (optional) | AbuseIPDB and VirusTotal | The higher of the reputation confidence and the malicious ratio, multiplied by 9; omitted when threat intelligence is disabled or unknown.
+@endtable
+@table Table 4.5: Impact Factors | 22,20,58
+Factor | Source Evidence | Values (0 to 9)
+I1 Asset criticality | Device attribution | Highest value among the internal devices involved: server or NAS 9, network device 8, workstation 6, phone 5, IoT device 5, guest device 3, unknown 5.
+I2 Service sensitivity | Destination port | 9 for remote administration, file-sharing and database services (ports 21, 22, 23, 139, 445, 1433, 3306, 3389, 5432, 5900); 6 for web services; 4 otherwise.
+I3 Potential technical impact | Suricata classification type | 9 for trojan activity, command and control and successful privilege gain; 8 for attempted administrator privilege gain, shellcode and exploit kits; 7 for attempted user privilege gain and web application attacks; 6 for denial of service, default login and credential theft; 3 for reconnaissance and scanning; 2 for policy violations and miscellaneous activity; 1 for traffic marked not suspicious; 4 otherwise.
+@endtable
+Likelihood (L) is the mean of the available likelihood factors, so that an unknown threat reputation is left out instead of being treated as evidence of safety. Impact (I) is not a plain average: the attack type sets the ceiling of potential damage, and the asset and service scale it, in the same way as the security requirement modifiers of the CVSS v4.0 environmental metrics (FIRST, 2023). A plain average was rejected during design because it allowed a valuable asset to raise a simple port scan to the highest band.
+@eq L = mean(L1, L2, L3, L4, L5)
+@eq A = (I1 + I2) / 2
+@eq I = I3 × (0.5 + 0.5 × A / 9)
+L and I are each mapped to a level of Low (below 3), Medium (3 to below 6) or High (6 to 9), and the risk band of the incident is read from the OWASP severity matrix in Table 4.6. Within a band, incidents are ordered by the score R, which ranges from 0 to 10:
+@eq R = 10 × (L / 9) × (I / 9)
+@table Table 4.6: Risk Band Matrix | 34,22,22,22
+Likelihood Level | Impact Low | Impact Medium | Impact High
+High | Medium | High | Critical
+Medium | Low | Medium | High
+Low | Note | Low | Medium
+@endtable
+Every factor value, the evidence it was derived from and a one-line reason (for example, "activity volume 6.0 because 100 alerts were observed") are stored as the factor breakdown of the incident. The breakdown is displayed on the incident detail page and included in the evidence package, so that the question "why is this incident High?" can always be answered from stored evidence, as recommended by Jalalvand et al. (2024).
+Device risk and network health summarise incident risk for the Home page using the probabilistic approach of Munir (2014), who combined per-node attack probabilities into department-level and network-level risk with the inclusion-exclusion principle. Under the assumption of independence, this union has the closed form 1 − Π(1 − p). Each incident contributes pᵢ = Rᵢ / 10, reduced by a time decay with a configurable half-life of seven days by default, and incidents in the Note band are excluded. The risk of a device d is the probability that at least one of its incidents represents real malicious activity:
+@eq P(d) = 1 − Π (1 − pᵢ), over the incidents involving device d
+The network risk combines the device risks weighted by asset criticality, w_d = I1 / 9, and the network health score is its complement:
+@eq P(N) = 1 − Π (1 − w_d × P(d)), over the internal devices
+@eq Health = 100 × (1 − P(N))
+The Home page lists the three devices that contribute most to P(N), so that the health score can be explained. Because the union assumes independent incidents and grows with the number of devices, the exclusion of Note-band incidents, the time decay and the asset weighting are used to limit saturation, and this behaviour is examined during evaluation. Munir (2014) also derived a security level from the share of alerts in each attack class; NetSeer presents this distribution only as an alert-mix chart on the Alerts page and does not use it in the health score, because the share of alerts does not measure risk. Scores are recalculated whenever the user changes the type of a device or the administrator changes a time window. Table 4.7 illustrates the model with two incidents.
+@table Table 4.7: Worked Example of the Risk Model | 26,37,37
+Item | Incident A: External Scan of a Server | Incident B: Workstation Contacting a Malware Server
+L1, L2, L3, L4 | 4 (Minor), 5.36 (60 alerts), 5 (R2), 9 (external to internal) | 9 (Critical), 3.34 (12 alerts), 2 (single), 7 (internal to external)
+Likelihood L | 5.84 (Medium) | 5.34 (Medium)
+I1, I2, I3 | 9 (server), 9 (SSH), 3 (reconnaissance) | 6 (workstation), 6 (HTTPS), 9 (trojan activity)
+Impact I | 3.0 (Medium) | 7.5 (High)
+Band and score R | Medium, 2.16 | High, 4.94
+Device risk P(d) | Server: 0.216 | Workstation: 0.494
+@endtable
+Without time decay, the network risk is P(N) = 1 − (1 − 1.0 × 0.216) × (1 − 0.67 × 0.494) = 0.474, which gives a network health score of 53. The workstation incident is ranked above the scan even though the server is the more valuable asset, because its attack type carries a much higher potential impact.
+@h3 4.4.7 Evidence Package Construction
+The final ACP stage builds a structured evidence package for each incident in JSON format. Every fact in the package receives an identifier: E-identifiers for observed evidence, such as alert groups with their rule, count, first and last seen times and 5-tuple, the hosts involved with their device types, each risk factor, the risk band and the score; and K-identifiers for retrieved knowledge. The package also contains an explicit list of unknowns, such as "attack success not observed" or "operating system unknown", so that the language model is told what the evidence does not show. The identifiers allow every statement in the explanation to be traced to the evidence it relies on.
+@h2 4.5 AI-Assisted Interpretation Module
+@h3 4.5.1 Knowledge Base and Retrieval
+The knowledge base used for Retrieval-Augmented Generation is stored in SQLite and built offline, so that retrieval does not require Internet access. It contains four sources: the text and metadata of every loaded Suricata rule; MITRE ATT&CK Enterprise techniques, descriptions, detection notes and mitigations, imported with the mitreattack-python library from a locally stored copy (MITRE Corporation, 2025); plain-language descriptions of Suricata classification types; and short investigation playbooks written for non-experts for common categories such as scanning, brute force, malware communication, exploit attempts, policy violations and denial of service, aligned with the incident response guidance of NIST SP 800-61 Rev. 3 (Nelson et al., 2025).
+Retrieval is hybrid and deterministic first. Knowledge is first retrieved by key, following the chain from rule identifier to rule metadata, to ATT&CK technique and to mitigations; playbooks are then retrieved by full-text search (SQLite FTS5 with BM25 ranking) using the signature message and category. Keyed retrieval was chosen over embedding-based similarity search because it is fully traceable, needs no additional model, and runs efficiently on a CPU-only mini PC. The knowledge base and retrieval module are built in Iteration 3.
+@h3 4.5.2 Prompt Construction and Prompt Maker
+The prompt maker combines the evidence package and the retrieved knowledge with an instruction template. The system instructions require the model to use plain language for a non-expert, to use only the supplied evidence, to cite evidence and knowledge identifiers for every claim and recommended action, to avoid claiming that an attack succeeded unless the evidence shows it, to state unknowns in an uncertainty section, and to restate rather than recalculate the ACP risk band. The Prompt Maker exposes preset questions as buttons, such as "Explain simply", "What should I do now?", "Is this serious?" and "Explain technically". Each button changes only the instruction template; the evidence remains the same.
+@h3 4.5.3 Language Model Integration
+The language model is accessed through Ollama, which runs the quantised Llama 3.2 3B Instruct model locally and exposes an HTTP interface. The request supplies a JSON schema for the expected output, so that the model returns structured fields: summary, what happened, why it matters, risk explanation, uncertainty, recommended actions with reasons and evidence references, and a list of claims with evidence references. A low sampling temperature is used to reduce variability. The caller is implemented behind a small interface so that an optional cloud model can be used with the user's own API key without changing the rest of the system. Because CPU inference is slow, explanations are generated as background jobs, cached per evidence package, and can be pre-generated for the highest-risk incidents after each analysis.
+@h3 4.5.4 Output Verification
+Before an explanation is displayed, the verifier checks it against the evidence package, as summarised in Table 4.8. Checks 1 to 5 run on every explanation; check 6 is computationally expensive on the target hardware and is therefore used during evaluation. The dashboard shows a "Verified" badge when no check fails; otherwise it shows the number of flagged claims and highlights the affected sentences. The proportion of flagged claims is the unsupported-claim rate used in the evaluation.
+@table Table 4.8: Output Verification Checks | 8,24,68
+No. | Check | Method
+1 | Schema | The output is validated against the Pydantic schema; the model is asked again once if validation fails.
+2 | Citation | Every claim and recommended action must cite at least one identifier, and every cited identifier must exist in the evidence package.
+3 | Entity | IP addresses, ports, rule identifiers, CVE identifiers and ATT&CK technique identifiers mentioned in the text must appear in the evidence package.
+4 | Risk consistency | Any risk level stated in the text must match the ACP risk band.
+5 | Overclaim | Statements asserting compromise or successful exploitation are flagged unless the evidence contains confirmation.
+6 | Faithfulness | Supported claims divided by total claims, judged claim by claim against the evidence and knowledge (Es et al., 2024); used during evaluation.
+@endtable
+@h2 4.6 Database Design
+NetSeer uses a single SQLite database in write-ahead logging mode, which suits a single-node deployment and avoids running a separate database server. Table 4.9 lists the main tables.
+@table Table 4.9: Main Database Tables | 28,72
+Table | Purpose
+users, sessions, login_attempts | At most one administrator and one user account with Argon2id password hashes, roles and theme preference; server-side sessions with CSRF tokens; and login attempts used for account lockout.
+audit_log | Security-relevant actions such as logins, uploads, user management and setting changes.
+analyses, analysis_files | Offline and real-time analyses with mode, name, status, interfaces, timestamps and counts, and the uploaded PCAP files with their SHA-256 hashes.
+settings | NetSeer configuration values set by the administrator, such as time windows, local network ranges and the language model.
+alerts | Normalised alerts with the original eve.json record.
+devices | Device inventory with MAC address, vendor, host name, services, device type, criticality and risk.
+alert_groups | Aggregated alert groups with time span, count and member alert identifiers.
+incidents, incident_groups | Possible incidents with correlation rule, likelihood, impact, band, score, factor breakdown and evidence package, and their alert groups.
+interpretations | AI explanations with model name, evidence hash, structured output, verification result and latency.
+packet_stats | Packets and bytes per hour derived from flow records, used for the traffic chart.
+@endtable
+@h2 4.7 Web Dashboard
+The dashboard is server-rendered with Jinja2 templates, styled with CSS variables to support a white (default) and a black theme, and uses Chart.js for charts. All assets are served locally so that the dashboard works without Internet access. The design follows the user design principles of Section 3.3.2: risk bands and plain-language titles are shown before technical detail, technical fields remain available on demand, and each page leads to a clear next action. Every page except Login and Settings shows the analysis selected in the page header. Table 4.10 describes the pages, and Figures 4.2 to 4.12 show the prototype.
+@table Table 4.10: Dashboard Pages | 18,82
+Page | Content
+Login | Username and password; on first launch, creation of the administrator account.
+Home | Network health gauge with the three devices that contribute most, top incidents by band, devices at risk, alert trend and status of the selected analysis.
+Network | Choice of offline or real-time mode, PCAP upload with progress, interface selection and status messages for real-time sessions, and the browser of stored analyses with renaming.
+Alerts | Packets-per-hour chart, alert-mix chart (share of alerts, not risk) and a filterable alert table with access to the original eve.json record.
+Incidents | Incident list with risk band, score, title, correlation rule, hosts and time span; the detail view shows the timeline of alert groups, the risk factor breakdown and the linked raw alerts.
+Devices | Device inventory with MAC address, vendor, host name, services, device type and risk, with device attribution.
+AI | Structured explanation of an incident, Prompt Maker buttons, verification badge and evidence references that expand to the cited evidence.
+Settings | White or black theme; for the administrator, account management, API keys and the NetSeer configuration.
+@endtable
+@figure ../docs/screenshots/01-login.png | Figure 4.2: Login Page | 5.8
+@figure ../docs/screenshots/02-home.png | Figure 4.3: Home Page | 6.2
+@figure ../docs/screenshots/03-network-upload.png | Figure 4.4: Network Page with PCAP Upload | 6.2
+@figure ../docs/screenshots/04-alerts.png | Figure 4.5: Alerts Page | 6.2
+@figure ../docs/screenshots/05-incidents.png | Figure 4.6: Incidents Page | 6.2
+@figure ../docs/screenshots/06-incident-detail.png | Figure 4.7: Incident Detail with Risk Factor Breakdown | 6.2
+@figure ../docs/screenshots/07-devices.png | Figure 4.8: Devices Page with Device Attribution | 6.2
+@figure ../docs/screenshots/08-ai.png | Figure 4.9: AI Explanation with Verification Result | 6.2
+@figure ../docs/screenshots/09-settings-users.png | Figure 4.10: User Management (Administrator) | 6.2
+@figure ../docs/screenshots/12-setup.png | Figure 4.11: First-Launch Administrator Setup | 5.8
+@figure ../docs/screenshots/13-network-live.png | Figure 4.12: Real-Time Mode with Interface Status | 6.2
+@h2 4.8 Security Design of NetSeer
+Because NetSeer stores sensitive information about the monitored network, the application itself is designed to industry security practice. Passwords are hashed with Argon2id. The password policy follows NIST SP 800-63B-4 (Temoshok et al., 2025), which favours password length and screening against commonly used passwords over composition rules: passwords must have at least 15 characters, must not appear in a list of common passwords and must not equal the username. After five failed login attempts the account is locked for five minutes, with a generic error message that does not reveal whether the username exists. On first launch, when no administrator exists, every request is redirected to a setup page that creates the administrator account and is disabled afterwards. NetSeer allows at most two accounts, one administrator and one user, enforced by the application and by a unique constraint in the database.
+Sessions use a random token stored in an HttpOnly, SameSite cookie with a server-side record, an idle timeout, and server-side invalidation on logout, after which the user is returned to the login page. Every state-changing form carries a CSRF token. Role-based access control is enforced on the server for every route, so the User role can view but not manage. Uploaded files are validated by signature and size, Suricata and the application run as unprivileged users, live capture runs in a separate service that holds only packet-capture capabilities, API keys are encrypted at rest, security-relevant actions are written to an audit log, and in deployment Nginx terminates TLS and restricts access to the local network. Table 4.11 maps these controls to ISO/IEC 27001:2022 Annex A (ISO/IEC, 2022) and to the OWASP Application Security Verification Standard (OWASP Foundation, 2025), which is used as the verification checklist in the cutover phase. These controls also mitigate the threats in the misuse case diagram (Figure 3.6).
+@table Table 4.11: Security Controls of NetSeer | 30,27,22,21
+Control | Misuse Case Mitigated | ISO/IEC 27001:2022 Annex A | OWASP ASVS 5.0 Chapter
+Argon2id hashing, length-based password policy, account lockout | Unauthorised access | A.5.17, A.8.5 | Authentication
+Server-side sessions, idle timeout, logout invalidation | Unauthorised access | A.8.5 | Session Management
+Role-based access control on every route | Get privileges | A.5.15, A.8.2 | Authorization
+CSRF tokens, input validation, file signature and size checks, parameterised SQL | Inject malicious code; manipulate sensitive data | A.8.26, A.8.28 | Validation and Business Logic; File Handling; Web Frontend Security
+Encryption of API keys at rest; TLS through Nginx | Manipulate sensitive data | A.8.24 | Cryptography; Secure Communication
+Audit logging of security-relevant actions | All | A.8.15 | Security Logging and Error Handling
+LAN-only access and unprivileged services | Unauthorised access | A.8.20 | Configuration
+First-launch setup locked after use; two-account limit | Unauthorised access; get privileges | A.5.15, A.5.18 | Authentication; Authorization
+Live capture isolated in a service with packet-capture capabilities only | Get privileges | A.8.2, A.8.18 | Configuration
+@endtable
+@h2 4.9 Development Progress
+Development follows the RAD iterations in Section 3.3.3. Table 4.12 lists each module with the iteration in which it is built and its status at the time of this report.
+@table Table 4.12: Development Progress | 52,16,32
+Module or Feature | Iteration | Status
+First-launch setup, two accounts, authentication, lockout and RBAC | 1 | [[FILL: status]]
+Network selection (offline), multi-file PCAP upload and Suricata processing | 1 | [[FILL: status]]
+Normalisation, preliminary enrichment and device attribution | 1 | [[FILL: status]]
+Analyses browser, Alerts page with alert mix, Devices page | 1 | [[FILL: status]]
+Aggregation and correlation (R1 to R4) | 2 | [[FILL: status]]
+Hybrid risk model, device risk and network health | 2 | [[FILL: status]]
+Incidents and Home pages, NetSeer configuration | 2 | [[FILL: status]]
+Knowledge base, RAG retrieval and evidence package | 3 | [[FILL: status]]
+Local LLM explanation, Prompt Maker and output verifier | 3 | [[FILL: status]]
+Optional threat intelligence and cloud LLM | 3 | [[FILL: status]]
+Real-time mode: interface detection, live capture, incremental processing and session records | 4 | [[FILL: status]]
+Deployment hardening and evaluation | Cutover | [[FILL: status]]
+@endtable
+An initial functional test was carried out with a packet capture recorded in a controlled laboratory setting, in which a service scan and a request known to trigger an Emerging Threats rule were generated. Table 4.13 records the preliminary results. These figures are not evaluation results; the full evaluation using UNSW-NB15 is reported in Chapter 5.
+@table Table 4.13: Preliminary Functional Test Results | 60,40
+Measure | Result
+Size of test capture | [[FILL: size in MB]]
+Raw Suricata alerts | [[FILL: number]]
+Alert groups after aggregation | [[FILL: number]]
+Possible incidents after correlation | [[FILL: number]]
+Alert volume reduction (1 minus incidents divided by alerts) | [[FILL: percentage]]
+Processing time (Suricata and ACP) | [[FILL: seconds]]
+Average AI explanation time on the i5-9500T | [[FILL: seconds]]
+Explanations passing verification | [[FILL: n of m]]
+Automated tests passed | [[FILL: n of m]]
+@endtable
+@h2 4.10 Chapter Summary
+This chapter presented the design and development of NetSeer. The architecture was refined into modules that map directly onto the seven ACP stages, followed by language-model interpretation and output verification, with offline and real-time data acquisition feeding the same pipeline. The chapter described the implementation of normalisation, enrichment, aggregation and correlation; a hybrid risk model that combines automatically derived OWASP-style likelihood and impact factors, a severity matrix and the probabilistic aggregation of Munir (2014) into incident bands, device risk and network health, each with a traceable breakdown; and evidence-package construction. It also described the knowledge base, prompt construction, local language-model integration and verification checks of the interpretation module; the database and dashboard design; and the security controls that protect NetSeer itself. Table 4.12 records the progress of each iteration. The next chapter will report the testing and evaluation of the system.

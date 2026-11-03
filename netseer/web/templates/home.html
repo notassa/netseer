@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+{% from "macros.html" import band_chip %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<h1>Home</h1>
+{% if not selected %}
+<div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
+{% else %}
+<div class="grid">
+  <div class="card">
+    <h2 style="margin-top:0">Network health</h2>
+    <div class="gauge"><canvas id="health-gauge"></canvas>
+      <div class="reading"><strong>{{ net.health }}</strong><span class="band {{ health_label | lower }}">{{ 100 - net.health }}% risk · {{ health_label }}</span></div>
+    </div>
+    <div class="field-hint">100 = no scored incident. Every incident above Note lowers it, weighted by its score, its age and the device it involves; the worst counts fully and each further one less (A5.4). {{ net.n_scored }} scored incident{{ 's' if net.n_scored != 1 }}.</div>
+    <h3>What lowers it most</h3>
+    <ul class="list-plain">
+    {% for i in net.top_incidents %}
+      <li>{{ band_chip(i.band) }} <a href="/incidents/{{ i.id }}">{{ i.title }}</a> <span class="muted">−{{ i.points }} point{{ 's' if i.points != 1 }}</span></li>
+    {% else %}
+      <li class="muted">No scored incident.</li>
+    {% endfor %}
+    </ul>
+    <h3>Top contributing devices</h3>
+    <ul class="list-plain">
+    {% for d in net.top_devices %}
+      <li><a href="/devices">{{ d.ip }}</a>{% if d.hostname %} <span class="muted">{{ d.hostname }}</span>{% endif %} ·
+          {{ types[d.type] }} · risk {{ '%.0f' | format(100 * d.risk) }}%</li>
+    {% else %}
+      <li class="muted">No device is involved in a scored incident.</li>
+    {% endfor %}
+    </ul>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Top incidents</h2>
+    <ul class="list-plain">
+    {% for i in top_incidents %}
+      <li>{{ band_chip(i.band) }} <a href="/incidents/{{ i.id }}">{{ i.title }}</a><br>
+          <span class="muted">score {{ '%.2f' | format(i.score or 0) }} · {{ i.n_alerts }} alerts · {{ i.first_seen[:16] | replace('T', ' ') }} UTC</span></li>
+    {% else %}
+      <li class="muted">No possible incidents in this analysis.</li>
+    {% endfor %}
+    </ul>
+    {% if counts.incidents > 5 %}<p style="margin-bottom:0"><a href="/incidents">All {{ counts.incidents }} incidents →</a></p>{% endif %}
+    <div class="row-actions" style="margin-top:.75rem">
+      {% for b, n in bands if n %}<a href="/incidents?band={{ b }}" style="text-decoration:none">{{ band_chip(b) }} <span class="muted">{{ n }}</span></a>{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2 style="margin-top:0">Devices at risk</h2>
+    <ul class="list-plain">
+    {% for d in at_risk %}
+      <li><span class="band {{ d.label | lower }}">{{ '%.0f' | format(100 * d.risk) }}%</span> {{ d.ip }}
+          {% if d.hostname %}<span class="muted">{{ d.hostname }}</span>{% endif %} · {{ types[d.type] }}</li>
+    {% else %}
+      <li class="muted">No device in a Medium, High or Critical incident.</li>
+    {% endfor %}
+    </ul>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Alert trend</h2>
+    {% if trend %}<div class="chart-box" style="height:200px"><canvas id="trend-chart"></canvas></div>
+    {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Analysis</h2>
+  <p><strong>{{ analysis.name }}</strong> <span class="badge {{ analysis.status | status_class }}">{{ analysis.status | replace('_', ' ') }}</span></p>
+  <div class="stats">
+    <div class="stat"><div class="value">{{ analysis.n_events }}</div><div class="label">Events</div></div>
+    <div class="stat"><div class="value">{{ counts.alerts }}</div><div class="label">Alerts</div></div>
+    <div class="stat"><div class="value">{{ counts.groups }}</div><div class="label">Alert groups</div></div>
+    <div class="stat"><div class="value">{{ counts.incidents }}</div><div class="label">Possible incidents</div></div>
+    <div class="stat"><div class="value">{{ counts.devices }}</div><div class="label">Devices</div></div>
+  </div>
+  {% if analysis.error %}<p class="muted" style="margin-bottom:0">{{ analysis.error }}</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if selected %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const v = n => css.getPropertyValue(n).trim();
+  Chart.defaults.color = v("--muted"); Chart.defaults.borderColor = v("--border");
+  const health = {{ net.health }};
+  new Chart(document.getElementById("health-gauge"), {
+    type: "doughnut",
+    data: { datasets: [{ data: [health, 100 - health], borderWidth: 0,
+                         backgroundColor: [v("--band-{{ health_label | lower }}"), v("--surface-2")] }] },
+    options: { rotation: -90, circumference: 180, cutout: "72%", maintainAspectRatio: false,
+               plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+  });
+  const trend = {{ trend | tojson }};
+  if (trend.length) {
+    new Chart(document.getElementById("trend-chart"), {
+      type: "bar",
+      data: { labels: trend.map(t => t.t), datasets: [{ label: "Alerts", data: trend.map(t => t.n), backgroundColor: v("--accent") }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+                 scales: { y: { beginAtZero: true, title: { display: true, text: "alerts per hour" } } } }
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

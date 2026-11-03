@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+{% from "macros.html" import search_input, reset_sort, pager %}
+{% block title %}Information{% endblock %}
+{% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
+{% block content %}
+<h1>Information</h1>
+<div class="row-actions" style="margin-bottom:1rem">
+  <a class="btn {{ 'primary' if tab == 'account' }}" href="/information?tab=account">Account activity</a>
+  <a class="btn {{ 'primary' if tab == 'process' }}" href="/information?tab=process">Process log</a>
+  <a class="btn {{ 'primary' if tab == 'details' }}" href="/information?tab=details">NetSeer details</a>
+</div>
+{% if tab == "details" %}
+{% macro gb(n) %}{{ '%.1f' | format(n / 1073741824) }} GB{% endmacro %}
+<p class="muted">The machine NetSeer runs on. Usage and temperatures refresh every 5 seconds.</p>
+<div class="grid">
+  <div class="card">
+    <h2 style="margin-top:0">System</h2>
+    <table class="kv">
+      <tr><th>Hostname</th><td>{{ sys.hostname }}</td></tr>
+      <tr><th>Operating system</th><td>{{ sys.os }} · kernel {{ sys.kernel }}</td></tr>
+      <tr><th>CPU</th><td>{{ sys.cpu }} · {{ sys.cores }} cores</td></tr>
+      <tr><th>Up since</th><td><time datetime="{{ sys.up_since }}">{{ sys.up_since }}</time></td></tr>
+      <tr><th>Suricata</th><td>{{ unk(sys.suricata) }}</td></tr>
+      <tr><th>Ollama</th><td>{{ sys.ollama }}</td></tr>
+      <tr><th>Python</th><td>{{ sys.python }}</td></tr>
+      <tr><th>Database</th><td>{{ '%.1f' | format(sys.db_bytes / 1048576) }} MB</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Usage</h2>
+    <table class="kv" id="sys-usage">
+      <tr><th>CPU</th><td id="u-cpu">{{ sys.usage.cpu_percent }}%</td></tr>
+      <tr><th>Load (1/5/15 min)</th><td id="u-load">{{ sys.usage.load | join(' / ') }}</td></tr>
+      <tr><th>Memory</th><td id="u-mem">{{ gb(sys.usage.memory.used) }} of {{ gb(sys.usage.memory.total) }}</td></tr>
+      <tr><th>Disk (data)</th><td id="u-disk">{{ gb(sys.usage.disk.used) }} of {{ gb(sys.usage.disk.total) }}</td></tr>
+      <tr><th>Temperatures</th><td id="u-temp">{% for t in sys.usage.temperatures %}{{ t.sensor }} {{ t.label }}: {{ '%.0f' | format(t.celsius) }} °C{{ '<br>' | safe if not loop.last }}{% else %}<span class="unknown">no sensors</span>{% endfor %}</td></tr>
+    </table>
+  </div>
+</div>
+<h2>Network interfaces</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Interface</th><th>State</th><th>MAC</th><th>Addresses</th><th>Received packets</th></tr></thead>
+  <tbody>
+  {% for n in sys.nics %}
+  <tr><td>{{ n.name }}</td><td><span class="badge {{ 'ok' if n.carrier else 'warn' }}">{{ 'link up' if n.carrier else 'no link' }}</span> {{ n.operstate }}</td>
+      <td>{{ unk(n.mac) }}</td><td>{{ n.addresses | join(', ') or '—' }}</td><td>{{ '{:,}'.format(n.rx_packets) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">
+  {% if tab == "account" %}Sign-ins, sign-outs, failed attempts and account changes. MAC is known only for devices on the same LAN as NetSeer.
+  {% else %}Uploads and analyses: what succeeded, what failed and why.{% endif %}
+</p>
+<form method="get" action="/information" class="filters">
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <div><label for="f-q">Search</label>{{ search_input("f-q", "q", params.q, options, "user, IP, MAC or detail") }}</div>
+  <div><label for="f-level">Level</label>
+    <select id="f-level" name="level"><option value="">any</option>
+      {% for lv in levels %}<option {{ 'selected' if level == lv }}>{{ lv }}</option>{% endfor %}
+    </select></div>
+  <div><button class="btn primary" type="submit">Filter</button> <a class="btn" href="/information?tab={{ tab }}">Clear</a> {{ reset_sort("log-table") }}</div>
+</form>
+<form method="post" action="/information/clear" style="margin:-.25rem 0 .75rem"
+      onsubmit="return confirm('Delete every entry of the {{ 'account activity' if tab == 'account' else 'process' }} log? This cannot be undone.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="tab" value="{{ tab }}">
+  <button class="btn danger small" type="submit">Clear {{ 'account activity' if tab == 'account' else 'process' }} log</button>
+</form>
+<div class="table-wrap">
+<table class="data sortable" id="log-table" data-server-sort>
+  {% if tab == "account" %}
+  <thead><tr><th data-key="time">Time</th><th data-key="event">Event</th><th data-key="user">User</th><th data-key="ip">IP</th><th data-key="mac">MAC</th><th>Vendor</th><th data-key="detail">Detail</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+  <tr>
+    <td><time datetime="{{ e.ts }}" title="{{ e.ts }} UTC">{{ e.ts[:19] | replace('T', ' ') }} UTC</time></td>
+    <td><span class="badge {{ {'warning': 'warn', 'error': 'danger'}.get(e.level, '') }}">{{ e.label }}</span></td>
+    <td>{{ e.username or (e.detail if e.action.startswith('login') else '') }}</td>
+    <td>{{ unk(e.ip) }}</td>
+    <td>{{ unk(e.mac) }}</td>
+    <td>{{ unk(e.vendor) }}</td>
+    <td class="muted">{{ e.detail if e.username else '' }}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">No entries.</td></tr>{% endfor %}
+  </tbody>
+  {% else %}
+  <thead><tr><th data-key="time">Time</th><th>Level</th><th data-key="event">Event</th><th data-key="user">By</th><th data-key="detail">Detail</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+  <tr>
+    <td><time datetime="{{ e.ts }}" title="{{ e.ts }} UTC">{{ e.ts[:19] | replace('T', ' ') }} UTC</time></td>
+    <td><span class="badge {{ {'info': 'info', 'warning': 'warn', 'error': 'danger'}[e.level] }}">{{ e.level }}</span></td>
+    <td>{{ e.label }}</td>
+    <td>{{ e.username or 'NetSeer' }}</td>
+    <td style="max-width:640px;word-break:break-word">{{ e.detail }}</td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">No entries.</td></tr>{% endfor %}
+  </tbody>
+  {% endif %}
+</table>
+</div>
+{{ pager(pg, qs, "Newer", "Older", "entries") }}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+{% if tab == "details" %}
+// Refresh usage and temperatures every 5 s.
+(function () {
+  const gb = n => `${(n / 1073741824).toFixed(1)} GB`;
+  setInterval(async () => {
+    try {
+      const u = await getJSON("/api/system");
+      document.getElementById("u-cpu").textContent = `${u.cpu_percent}%`;
+      document.getElementById("u-load").textContent = u.load.join(" / ");
+      document.getElementById("u-mem").textContent = `${gb(u.memory.used)} of ${gb(u.memory.total)}`;
+      document.getElementById("u-disk").textContent = `${gb(u.disk.used)} of ${gb(u.disk.total)}`;
+      document.getElementById("u-temp").innerHTML = u.temperatures.map(t =>
+        `${esc(t.sensor)} ${esc(t.label)}: ${t.celsius.toFixed(0)} °C`).join("<br>") || "no sensors";
+    } catch (e) { /* try again next time */ }
+  }, 5000);
+})();
+{% endif %}
+// Show times in the viewer's local time zone; the UTC value stays in the tooltip.
+document.querySelectorAll("time[datetime]").forEach(t => {
+  const d = new Date(t.getAttribute("datetime"));
+  if (!isNaN(d)) t.textContent = d.toLocaleString();
+});
+</script>
+{% endblock %}

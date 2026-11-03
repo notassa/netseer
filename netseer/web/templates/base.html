@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en" data-theme="{{ user.theme if user else 'white' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NetSeer{% endblock %} · NetSeer</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script>
+    // Apply the remembered sidebar state before first paint (default: collapsed on narrow screens).
+    try {
+      const v = localStorage.getItem("netseer.sidebar");
+      if (v === "collapsed" || (v === null && innerWidth < 900)) document.documentElement.classList.add("sidebar-collapsed");
+    } catch (e) { if (innerWidth < 900) document.documentElement.classList.add("sidebar-collapsed"); }
+  </script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% block body %}{% endblock %}
+</body>
+</html>

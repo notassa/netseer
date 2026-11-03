@@ -1,0 +1,207 @@
+{% extends "layout.html" %}
+{% from "macros.html" import band_chip %}
+{% block title %}Incident {{ inc.id }}{% endblock %}
+{% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
+{% macro num(v) %}{% if v is none %}<span class="unknown">left out</span>{% elif v is number and v != v | int %}{{ '%.2f' | format(v) }}{% else %}{{ v }}{% endif %}{% endmacro %}
+{% block content %}
+<p><a href="/incidents">← All incidents</a></p>
+<h1>{{ band_chip(inc.band) }} {{ inc.title }}</h1>
+
+<div class="card">
+  <div class="stats">
+    <div class="stat"><div class="value">{{ '%.2f' | format(inc.score or 0) }}</div><div class="label">Score R (0–10)</div></div>
+    <div class="stat"><div class="value">{{ '%.2f' | format(inc.likelihood or 0) }}</div><div class="label">Likelihood L (0–9)</div></div>
+    <div class="stat"><div class="value">{{ '%.2f' | format(inc.impact or 0) }}</div><div class="label">Impact I (0–9)</div></div>
+    <div class="stat"><div class="value">{{ inc.n_alerts }}</div><div class="label">Alerts in {{ groups | length }} group{{ 's' if groups | length != 1 }}</div></div>
+    <div class="stat"><div class="value">{{ inc.rule | replace(',', ', ') }}</div><div class="label">Linked by</div></div>
+  </div>
+  <p class="muted" style="margin-bottom:0">
+    {{ inc.first_seen[:19] | replace('T', ' ') }} to {{ inc.last_seen[:19] | replace('T', ' ') }} UTC ·
+    Sources: {{ inc.src_ips | join(', ') or 'unknown' }} · Destinations: {{ inc.dest_ips | join(', ') or 'unknown' }}
+    {% if evidence.tactics %}<br>ATT&amp;CK tactics: {% for t in evidence.tactics %}<span class="badge">{{ t.name }}</span> {% endfor %}{% endif %}
+    {% if evidence.techniques %}· techniques: {{ evidence.techniques | join(', ') }}{% endif %}
+  </p>
+  {% if recon_before %}<p style="margin-bottom:0">Preceded by recon:
+    {% for r in recon_before %}<a href="/incidents/{{ r.id }}">{{ band_chip(r.band) }} {{ r.title }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <p style="margin-bottom:0"><a class="btn primary" href="/ai?incident={{ inc.id }}">Explain with AI</a></p>
+</div>
+
+<h2>Attack → Victim</h2>
+<p class="muted">Source and destination as Suricata saw them{% if n_pairs > attack_pairs | length %} (top {{ attack_pairs | length }} of {{ n_pairs }} pairs){% endif %}.</p>
+{% macro host(ip, dev) %}<strong>{{ unk(ip) }}</strong>{% if dev %} <span class="muted">{{ dev.hostname or '' }} · {{ device_types.get(dev.type, dev.type) }}</span>{% elif ip %} <span class="muted">outside the LAN</span>{% endif %}{% endmacro %}
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Attacker (source)</th><th></th><th>Victim (destination)</th><th>Alerts</th><th>Main signature</th></tr></thead>
+  <tbody>
+  {% for p in attack_pairs %}
+  <tr><td>{{ host(p.src, p.src_dev) }}</td><td aria-hidden="true">→</td><td>{{ host(p.dest, p.dest_dev) }}</td>
+      <td>{{ p.alerts }}</td><td>{{ p.top }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Why this band</h2>
+<p class="muted">L is the mean of the likelihood factors that are present; I = I3 × (0.5 + 0.5 × (I1 + I2) / 18). The band comes from the OWASP matrix of their levels (Low &lt; 3 ≤ Medium &lt; 6 ≤ High).</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Factor</th><th>Value (0–9)</th><th>Why</th><th>Evidence</th></tr></thead>
+  <tbody>
+  {% for key, name, f in factors %}
+  <tr>
+    <td><strong>{{ key }}</strong> {{ name }}</td>
+    <td>{{ num(f.value) }}</td>
+    <td>{{ f.why }}</td>
+    <td class="muted">{% for k, v in f.evidence.items() %}{{ k | replace('_', ' ') }}: {{ v if v is not none else 'unknown' }}{{ '; ' if not loop.last }}{% else %}—{% endfor %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">Not scored yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Timeline</h2>
+<div class="card">
+  <div class="row-actions" style="margin-bottom:.6rem">
+    <span class="muted">Step</span>
+    {% for m in [1, 5, 10, 20, 40, 60] %}<button class="btn small" type="button" data-step="{{ m }}">{{ m }} min</button>{% endfor %}
+    {% if timeline | length > timeline_groups %}<button class="btn small" type="button" id="gantt-all">Show all {{ timeline | length }} groups</button>{% endif %}
+  </div>
+  <div class="gantt" id="gantt"></div>
+  <div class="field-hint">One bar per alert group, from its first to its last alert, rounded out to the step. Scroll sideways for long incidents; hover a bar for exact times.</div>
+</div>
+
+<h2>Alert groups</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>First seen (UTC)</th><th>Last seen</th><th>Source</th><th>Destination</th><th>Signature</th><th>Class</th><th>Priority</th><th>Alerts</th></tr></thead>
+  <tbody>
+  {% for g in groups %}
+  <tr>
+    <td>{{ g.first_seen[:19] | replace('T', ' ') }}</td>
+    <td>{{ g.last_seen[:19] | replace('T', ' ') }}</td>
+    <td>{{ unk(g.src_ip) }}</td>
+    <td>{{ unk(g.dest_ip) }}{% if g.dest_port %}:{{ g.dest_port }}{% endif %} <span class="muted">{{ g.proto or '' }}</span></td>
+    <td>{{ g.signature }} <span class="muted">({{ g.sid }})</span></td>
+    <td>{{ unk(g.classtype) }}</td>
+    <td>{{ unk(g.max_priority) }}</td>
+    <td>{{ g.count }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Raw alerts <span class="muted" style="font-weight:normal">({% if inc.n_alerts > raw_limit %}first {{ raw_limit }} of {% endif %}{{ inc.n_alerts }})</span></h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Time (UTC)</th><th>Source</th><th>Destination</th><th>Signature</th><th>Priority</th><th>Severity</th><th>Direction</th></tr></thead>
+  <tbody>
+  {% for a in alerts %}
+  <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
+    <td>{{ a.ts[:19] | replace('T', ' ') }}</td>
+    <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
+    <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
+    <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
+    <td>{{ unk(a.priority) }}</td>
+    <td>{{ unk(a.sig_severity) }}</td>
+    <td>{{ unk(a.direction) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block modals %}
+<aside class="drawer" id="raw-drawer" aria-label="Raw alert">
+  <header><strong>Raw eve.json record</strong><button class="btn small" id="raw-close">Close</button></header>
+  <pre id="raw-body"></pre>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const timeline = {{ timeline | tojson }};
+  const BUSIEST = {{ timeline_groups }}, STEP_PX = 56, ROW = 24, HEAD = 34, LABEL = 300;
+  const box = document.getElementById("gantt");
+  const pad = n => String(n).padStart(2, "0");
+  const hhmm = d => `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  const full = d => d.toISOString().slice(0, 19).replace("T", " ");
+  const svgEl = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+                                  for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const groups = timeline.map(g => ({ ...g, t0: Date.parse(g.start), t1: Date.parse(g.end) }));
+  const span = groups.length ? (Math.max(...groups.map(g => g.t1)) - Math.min(...groups.map(g => g.t0))) / 60000 : 0;
+  let step = [1, 5, 10, 20, 40, 60].find(m => span / m <= 120) || 60;
+  let showAll = groups.length <= BUSIEST;
+
+  function draw() {
+    const keep = new Set(showAll ? groups : [...groups].sort((a, b) => b.count - a.count).slice(0, BUSIEST));
+    const rows = groups.filter(g => keep.has(g));
+    const ms = step * 60000;
+    const start = Math.floor(Math.min(...rows.map(g => g.t0)) / ms) * ms;
+    const steps = Math.max(1, Math.ceil((Math.max(...rows.map(g => g.t1)) + 1) / ms) - start / ms);
+    const scroller = box.querySelector(".gantt-scroll");
+    const leftTime = scroller ? box.dataset.start * 1 + scroller.scrollLeft / STEP_PX * box.dataset.step * 60000 : null;
+    const width = Math.max(steps * STEP_PX, box.clientWidth - LABEL - 2);
+    const height = HEAD + rows.length * ROW;
+
+    const labels = document.createElement("div");
+    labels.className = "gantt-labels";
+    labels.style.height = `${height}px`;
+    labels.innerHTML = `<div style="height:${HEAD}px"></div>`;
+    rows.forEach(g => { const d = document.createElement("div"); d.className = "gantt-label";
+                        d.textContent = `${g.label} (${g.count})`; d.title = d.textContent; labels.append(d); });
+
+    const svg = svgEl("svg", { width, height, class: "gantt-plot" });
+    let prevDay = "";
+    for (let i = 0; i <= steps; i++) {
+      const t = new Date(start + i * ms), x = i * STEP_PX;
+      svg.append(svgEl("line", { x1: x, x2: x, y1: HEAD - 6, y2: height, class: "gantt-grid" }));
+      if (i === steps) break;
+      const day = t.toISOString().slice(5, 10);
+      const text = svgEl("text", { x: x + 3, y: day !== prevDay ? 13 : 27, class: "gantt-tick" });
+      text.textContent = day !== prevDay ? day : hhmm(t);
+      svg.append(text);
+      if (day !== prevDay) { const tt = svgEl("text", { x: x + 3, y: 27, class: "gantt-tick" }); tt.textContent = hhmm(t); svg.append(tt); }
+      prevDay = day;
+    }
+    rows.forEach((g, r) => {
+      const a = Math.floor(g.t0 / ms) * ms, b = Math.max(a + ms, Math.ceil((g.t1 + 1) / ms) * ms);
+      const rect = svgEl("rect", { x: (a - start) / ms * STEP_PX + 1, y: HEAD + r * ROW + 5, rx: 3,
+                                   width: (b - a) / ms * STEP_PX - 2, height: ROW - 10, class: "gantt-bar" });
+      const tip = svgEl("title", {});
+      tip.textContent = `${g.label}\n${full(new Date(g.t0))} – ${full(new Date(g.t1))} UTC\n${g.count} alert${g.count === 1 ? "" : "s"}`;
+      rect.append(tip);
+      svg.append(rect);
+    });
+
+    const scroll = document.createElement("div");
+    scroll.className = "gantt-scroll";
+    scroll.append(svg);
+    box.replaceChildren(labels, scroll);
+    box.dataset.start = start; box.dataset.step = step;
+    if (leftTime !== null) scroll.scrollLeft = (leftTime - start) / ms * STEP_PX;
+    document.querySelectorAll("[data-step]").forEach(b => b.classList.toggle("primary", +b.dataset.step === step));
+    const all = document.getElementById("gantt-all");
+    if (all) all.textContent = showAll ? `Show the ${BUSIEST} busiest groups` : `Show all ${groups.length} groups`;
+  }
+  if (groups.length) {
+    document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => { step = +b.dataset.step; draw(); }));
+    const all = document.getElementById("gantt-all");
+    if (all) all.addEventListener("click", () => { showAll = !showAll; draw(); });
+    draw();
+  }
+
+  const drawer = document.getElementById("raw-drawer"), body = document.getElementById("raw-body");
+  document.querySelectorAll("tr[data-alert]").forEach(row => row.addEventListener("click", async () => {
+    body.textContent = "Loading…"; drawer.classList.add("open");
+    try { body.textContent = JSON.stringify(await getJSON(`/api/alerts/${row.dataset.alert}`), null, 2); }
+    catch (e) { body.textContent = `Could not load the record: ${e.message}`; }
+  }));
+  document.getElementById("raw-close").addEventListener("click", () => drawer.classList.remove("open"));
+})();
+</script>
+{% endblock %}

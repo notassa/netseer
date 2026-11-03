@@ -1,0 +1,29 @@
+# NetSeer defaults (CONCEPTS A15). Values saved in the `settings` table override these.
+
+[settings]
+aggregation_gap_s = 300          # ACP 3: a gap longer than this starts a new alert group
+correlation_window_min = 30      # ACP 4: correlation window for R1-R4
+live_interval_s = 30             # C4: live processing interval
+half_life_days = 7               # A5.4: risk decay half-life
+lan_cidrs = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]   # RFC1918
+max_upload_mb = 2048           # per file (owner captures: 700 MB–1.87 GB)
+llm_backend = "ollama"           # "ollama" | "cloud"
+llm_model = "llama3.2:3b"
+cloud_url = "https://api.openai.com/v1"   # any OpenAI-compatible API (opt-in, user's key)
+cloud_model = ""
+retention_days = 0               # 0 = keep all analyses
+inside_rules = true              # A3: EXTERNAL_NET=any so ET rules also fire for an attacker inside the LAN
+auto_logout = true               # A12: sessions end after session_minutes unless extended; off = 12 h cap
+
+[app]
+ollama_url = "http://localhost:11434"
+suricata_bin = "suricata"
+mergecap_bin = "mergecap"
+capinfos_bin = "capinfos"
+tcpdump_bin = "tcpdump"
+oui_csv = "/usr/share/ieee-data/oui.csv"
+classification_file = "/var/lib/suricata/rules/classification.config"   # falls back to config/suricata/
+session_minutes = 10             # session length; only the Extend button adds time
+secure_cookies = false           # set true behind Nginx TLS
+min_free_disk_factor = 2.5       # refuse an upload unless free disk >= 2.5 x its size
+trusted_proxies = []             # peers allowed to set X-Forwarded-For (set ["127.0.0.1"] behind Nginx)

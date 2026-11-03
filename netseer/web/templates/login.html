@@ -1,0 +1,15 @@
+{% extends "auth_base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block card %}
+<h1>Sign in</h1>
+{% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+<form method="post" action="/login">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" type="text" required maxlength="64" value="{{ username or '' }}" autocomplete="username" autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required maxlength="128" autocomplete="current-password">
+  <button class="btn primary" type="submit">Sign in</button>
+</form>
+{% endblock %}

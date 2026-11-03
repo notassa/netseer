@@ -1,0 +1,36 @@
+# Not for the repo: copyrighted reference, personal notes, original and generated report binaries
+ref/
+report/reference/
+docs/*.pdf
+NETSEER WRITEUP.docx
+FYP2-Report.pdf
+report/FYP2-Report-revised.docx
+report/FYP2-Report-revised.pdf
+report/netseer_writeup.docx
+~$*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime data
+*.db
+*.db-wal
+*.db-shm
+netseer/src/database/pcaps/*
+netseer/src/database/eves/*
+!netseer/src/database/pcaps/.gitkeep
+!netseer/src/database/eves/.gitkeep
+*.pcap
+*.pcapng
+
+# Secrets
+.env
+*.key
+
+# Knowledge base inputs (downloaded, rebuildable)
+netseer/ai/kb/enterprise-attack.json
+*.tmp
+netseer/src/database/manuf

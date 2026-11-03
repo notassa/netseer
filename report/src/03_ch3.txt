@@ -1,0 +1,120 @@
+@chapter CHAPTER 3: METHODOLOGY
+@h2 3.1 Introduction
+This chapter describes the methodology used to design, develop and evaluate NetSeer, the proposed alert interpretation system. The project follows a Software Development Life Cycle (SDLC) approach, and the Rapid Application Development (RAD) model is selected as the development methodology. This chapter discusses the RAD model and the reasons for its selection, the activities carried out in each development phase, the system requirements derived for NetSeer, the evaluation plan, the hardware and software requirements, and the project planning.
+@h2 3.2 Rapid Application Development (RAD) Model
+The RAD model is an incremental software development model that emphasises rapid prototyping, active user involvement and short development cycles, typically lasting between 60 and 90 days (Pressman & Maxim, 2020). As shown in Figure 3.1, the model consists of four phases: requirements planning, user design, construction and cutover. Rather than completing the entire system in a single pass, RAD allows the main modules to be built early, tested repeatedly and refined based on continuous feedback.
+@figure assets/fig3_1_rad.png | Figure 3.1: Rapid Application Development (RAD) Model | 6.0
+@source (Source: https://medium.com/@myelmarc/sdlc-methodology-101-a-beginners-guide-to-rapid-application-development-rad-492ab88de7ef)
+RAD is particularly effective for projects with well-defined user interfaces, modular components and a need for fast delivery (Pressman & Maxim, 2020). For NetSeer, usability and user acceptance are as important as technical correctness, because the target users are non-expert administrators. The iterative nature of RAD allows the dashboard and the interpretation output to be improved through repeated prototyping and feedback from Oriental Tech, and it allows weaknesses to be identified and corrected early in development. The modular ACP pipeline also maps naturally onto RAD iterations, since each stage can be built, tested and demonstrated independently.
+@h2 3.3 Phases of Rapid Application Development (RAD)
+@h3 3.3.1 Requirements Planning
+The first step in the requirements planning phase was to define the main problems facing small-network administrators. These administrators include home-office users, small-business owners and educational-laboratory managers who want to monitor network security but lack technical security experience. The primary user is a small-network administrator with basic networking skills but no formal training in cybersecurity, represented in this project by the administrators of Oriental Tech. Requirements were derived from the literature review, an analysis of existing IDS tools, discussions with Oriental Tech, and observation of how non-expert users interact with security dashboards.
+This phase focused on the specific security monitoring needs of small networks, including the detection of threats such as port scanning, brute-force attempts and malware communication without overwhelming the user with false-positive alerts. Once the requirements were gathered, they were classified into functional requirements, non-functional (quality) requirements and constraints, and each requirement was prioritised using the MoSCoW method (Must, Should, Could, Won't) so that the essential capabilities are delivered first in the time-boxed RAD iterations. Table 3.1 lists the functional requirements and Table 3.2 the non-functional requirements.
+@table Table 3.1: Functional Requirements | 9,75,16
+ID | Requirement | Priority
+FR1 | On first launch, when no administrator exists, the system shall require the administrator account to be created before any other function can be used. | Must
+FR2 | The system shall authenticate users with a username and password and assign either the Administrator (view and manage) or User (view only) role, with at most one account of each role. | Must
+FR3 | The system shall lock an account for 5 minutes after 5 consecutive failed login attempts; logging out shall end the session and return the user to the login page. | Must
+FR4 | The administrator shall be able to create, reset and delete the User account. | Must
+FR5 | The user shall be able to choose between offline analysis and real-time analysis (network selection). | Must
+FR6 | In offline mode, the user shall be able to upload one or more PCAP files; the system shall validate the file type and size, merge files uploaded together into one analysis and process it with Suricata. | Must
+FR7 | In real-time mode, the user shall select the mirror (SPAN) and LAN network interfaces; the analysis shall wait until both interfaces are connected and traffic is observed on the mirror interface, and each real-time session shall be stored as a separate analysis. | Must
+FR8 | The system shall store every analysis locally with an automatically assigned name, and allow the user to rename and browse previous analyses. | Must
+FR9 | The system shall normalise Suricata alerts and enrich them with network, device and application context (ACP stages 1 to 2). | Must
+FR10 | The system shall list discovered devices and ask the user to assign each device a type (after an offline analysis, and when new devices appear in real-time mode); the device type shall influence the risk score. | Must
+FR11 | The system shall aggregate and correlate alerts into possible incidents and enrich them at incident level (ACP stages 3 to 5). | Must
+FR12 | The system shall assign each incident a risk band and score with a stored factor breakdown, and compute a risk value for each device and an overall network health score (ACP stage 6). | Must
+FR13 | The system shall build an evidence package and generate an AI explanation of an incident using retrieved knowledge (ACP stage 7 and RAG). | Must
+FR14 | The system shall verify each AI explanation against the evidence package and flag unsupported claims. | Must
+FR15 | The system shall provide Login, Home, Network, Alerts, Incidents, Devices, AI and Settings pages accessible through the local network. | Must
+FR16 | The administrator shall be able to adjust the NetSeer configuration, including processing time windows, local network ranges, the language model and data retention. | Must
+FR17 | The system shall provide preset prompt buttons (Prompt Maker) for common questions about an incident. | Should
+FR18 | The system shall support optional threat-intelligence enrichment (AbuseIPDB, VirusTotal) and an optional cloud LLM using the user's own API keys. | Should
+FR19 | The system shall offer a white (default) and a black colour theme. | Should
+FR20 | The administrator shall be able to view the audit log of security-relevant actions. | Should
+FR21 | The system shall export incident lists to CSV. | Could
+@endtable
+@table Table 3.2: Non-Functional Requirements | 11,20,69
+ID | Category | Requirement
+NFR1 | Usability | Explanations use plain language suitable for non-experts; the dashboard targets a System Usability Scale (SUS) score of at least 68.
+NFR2 | Performance | A 100 MB PCAP file is processed through Suricata and ACP within 5 minutes on the target hardware; in real-time mode new alerts appear within one processing interval (30 seconds by default); dashboard pages load within 2 seconds; AI explanations are generated in the background.
+NFR3 | Security | Passwords are hashed with Argon2id and follow NIST SP 800-63B-4 (at least 15 characters, screened against common passwords); sessions, CSRF protection, role-based access control and audit logging are enforced; the application is checked against OWASP ASVS 5.0 Level 1.
+NFR4 | Privacy | By default all processing, including language-model inference, stays on-premises; external services are opt-in.
+NFR5 | Traceability | Every incident links to its raw alerts and stores the factor breakdown of its risk score; every AI claim cites evidence.
+NFR6 | Resource | The system runs on a mini PC with an Intel Core i5-9500T, 16 to 24 GB RAM and a 256 GB SSD, without a GPU.
+NFR7 | Maintainability | The pipeline is modular, scoring weights and time windows are configurable, and core modules have automated tests.
+@endtable
+The main constraints of the project are the absence of a GPU on the target hardware, which limits the size of the local language model; the passive nature of enrichment, which depends on what is present in the captured traffic; and the dependence on Suricata rule coverage, since NetSeer can only interpret alerts that Suricata generates.
+@h3 3.3.2 User Design
+The user design phase translated the gathered requirements into the structure, interface and processing flow of NetSeer. Because the target users are non-expert administrators, user-focused design was prioritised, and every design decision was evaluated against whether it would help a non-technical user understand what is happening on their network. The core usability problem addressed in this phase is that raw Suricata alerts are too technical for non-expert users to understand. In line with RAD, low-fidelity wireframes and a clickable prototype were reviewed with Oriental Tech before construction began.
+Several diagrams were developed to describe system operation and user interaction. The system architecture diagram (Figure 3.2) shows the overall structure of NetSeer, comprising the web dashboard, the backend with its data acquisition, context enrichment, Alert-Context Processing and interpretation components, and the database. The activity diagram (Figure 3.3) depicts the processing flow from PCAP upload and Suricata processing, through Alert-Context Processing (ACP), to the AI-assisted explanation displayed on the dashboard. The block diagram (Figure 3.4) summarises the data flow from the network data source to the user. The use case diagram (Figure 3.5) describes the main functions available to the User and Administrator roles, and the misuse case diagram (Figure 3.6) describes the threats that could be directed at NetSeer itself and the mitigations that address them. The detailed design of each component is presented in Chapter 4.
+@figure assets/fig3_2_architecture.png | Figure 3.2: System Architecture Diagram | 6.2
+@figure assets/fig3_3_activity.png | Figure 3.3: Activity Diagram | 2.6
+@figure assets/fig3_4_block.png | Figure 3.4: Block Diagram | 6.2
+@figure assets/fig3_5_usecase.png | Figure 3.5: Use Case Diagram | 3.6
+@figure assets/fig3_6_misuse.png | Figure 3.6: Misuse Case Diagram | 5.6
+@h3 3.3.3 Construction
+The system modules are built and integrated during the construction phase according to the approved design, in short iterations that each end with a working, demonstrable increment, testing and a feedback session. The construction phase is organised into the following iterations, which follow the order in the project Gantt chart (Figure 3.8):
+@bullets
+- Iteration 1 (web system and context enrichment): the FastAPI web application, first-launch administrator setup, authentication and role-based access control, network selection for offline mode, multi-file PCAP upload and Suricata processing, the eve.json parser, alert normalisation, device discovery and attribution, the analyses browser, and the Network, Alerts and Devices pages.
+- Iteration 2 (context processing): aggregation, correlation, incident-level enrichment, risk prioritisation, device risk and network health, the NetSeer configuration settings, and the Incidents and Home pages, together with the UNSW-NB15 validation scripts used to calibrate the time windows and risk factors.
+- Iteration 3 (interpretation): the knowledge base and retrieval module (RAG), evidence-package construction, the Prompt Maker, the language-model integration through Ollama, the output verifier and the AI page.
+- Iteration 4 (real-time monitoring): interface selection and detection, live capture through the mirror port, incremental processing of new alerts, device attribution for newly seen devices and storage of each session as a separate analysis, reusing the same pipeline.
+@endbullets
+The web dashboard is built with FastAPI, Jinja2 templates and Chart.js, and the prototype is tested and debugged continuously with automated unit tests and a fixed set of sample PCAP files that serve as a regression check after each iteration.
+@h3 3.3.4 Cutover
+The cutover phase covers final integration, testing and preparation of the system for evaluation. Remaining defects are fixed, and the system is deployed on the target hardware for local operation as a set of system services behind an Nginx reverse proxy with TLS, accessible only from the local network. A security hardening review is carried out against the OWASP ASVS 5.0 checklist, and the evaluation described in Section 3.4 is performed. This phase ensures that the system functions correctly and achieves the project goals before the final presentation.
+@h2 3.4 Evaluation Plan
+The proposed system is evaluated in four parts, corresponding to its main components.
+First, Suricata alert validation assesses the alerts generated from the UNSW-NB15 dataset against the dataset ground truth, using timestamp, source and destination addresses, ports, protocol and attack category where available. Each alert is classified as a true positive, a false positive or uncertain. This validation characterises the detection input to the proposed system; it does not claim that the proposed system improves Suricata detection.
+Second, the ACP evaluation examines the reduction in alert volume, the correctness of aggregation, the usefulness of correlation and the traceability of risk prioritisation.
+Third, the AI interpretation evaluation measures the faithfulness, factual accuracy and coverage of the generated explanations, the unsupported-claim rate, the clarity of stated uncertainty, the understandability and usefulness of the explanations, and the relevance of the recommended actions.
+Fourth, the system evaluation measures processing time, dashboard usability, local deployment feasibility and resource usage on the target hardware, together with a user comprehension study that compares users' understanding of raw Suricata alerts with their understanding of NetSeer explanations. Where host identity, operating system or passive fingerprinting data is unavailable in the dataset, this is treated as a dataset limitation and the corresponding context is marked as unknown rather than fabricated. Table 3.3 summarises the metrics.
+@table Table 3.3: Evaluation Metrics | 20,28,52
+Part | Metric | Definition or Method
+Suricata validation | True positive, false positive and uncertain rates per attack category | Alerts matched to UNSW-NB15 ground-truth records by 5-tuple and time window.
+ACP | Alert volume reduction | 1 minus the number of incidents (and alert groups) divided by the number of raw alerts.
+ACP | Aggregation and correlation correctness | Proportion of groups and incidents whose alerts share one ground-truth attack label, with manual review of a sample.
+ACP | Traceability | Proportion of incidents that link to their raw alerts and store a complete risk factor breakdown.
+AI interpretation | Faithfulness | Supported claims divided by total claims, following Es et al. (2024).
+AI interpretation | Unsupported-claim rate | Claims flagged by the verifier or by manual review divided by total claims.
+AI interpretation | Accuracy, coverage, uncertainty and usefulness | Manual review of sampled incidents and Likert-scale ratings by users and an expert from Oriental Tech.
+System | Processing time and resource usage | Seconds per megabyte of PCAP, LLM latency, CPU and memory usage on the target hardware.
+System | Usability | System Usability Scale (SUS) questionnaire (Lewis, 2018).
+System | User comprehension | Quiz score and confidence when interpreting raw Suricata alerts compared with NetSeer explanations.
+@endtable
+@h2 3.5 System Requirements
+@h3 3.5.1 Hardware
+The following hardware specification is recommended for deploying NetSeer in a small network environment, such as a home office or an educational laboratory. It supports the smooth operation of Suricata, the ACP pipeline and the quantised large language model.
+@figure assets/fig3_7_optiplex.png | Figure 3.7: Dell OptiPlex 5070 Micro | 2.6
+@table Table 3.4: Hardware Requirements | 35,65
+Component | Specification
+Model | Dell OptiPlex 5070 Micro
+Processor | Intel Core i5-9500T (6 cores, no discrete GPU)
+RAM | 16 GB (up to 24 GB)
+Storage | 256 GB SATA SSD
+Network | Two wired Ethernet interfaces: one for management and dashboard access on the LAN, and one (onboard or USB 3.0 Gigabit adapter) connected to the switch mirror (SPAN) port for real-time monitoring
+@endtable
+@h3 3.5.2 Software
+The proposed system is built entirely from open-source software components, as listed in Table 3.5.
+@table Table 3.5: Software Requirements | 30,40,30
+Item | Specification | Version
+Operating System | Ubuntu Server | 24.04 LTS
+Intrusion Detection System | Suricata with ET Open and abuse.ch rulesets | 8.0
+Web Framework | FastAPI with Uvicorn | Latest stable (pinned)
+Templates and Charts | Jinja2 and Chart.js | 3.1 / 4.x
+Reverse Proxy | Nginx | 1.24
+Programming Language | Python | 3.12
+Database | SQLite | 3.45
+LLM Runtime | Ollama | Latest stable
+Large Language Model | Llama 3.2 3B Instruct (Q4_K_M quantised) / optional cloud LLM API | -
+Packet Utilities | Wireshark command-line tools (mergecap) | 4.2
+Threat Knowledge | MITRE ATT&CK Enterprise (mitreattack-python) | Latest release
+@endtable
+@h3 3.5.3 Costing
+All hardware and software components used in the proposed system are free and open-source, with the exception of an optional cloud large-language-model API and optional threat-intelligence services, whose cost depends on the user's own subscription. The system is designed to run entirely on a locally hosted, quantised model, avoiding recurring subscription costs.
+@h2 3.6 Project Planning
+The project activities were planned and monitored using a Gantt chart, shown in Figure 3.8. The chart sets out the main phases of the project, namely requirements planning, user design, construction and cutover, together with the evaluation, and their expected durations across the Final Year Project timeline.
+@figure assets/fig3_8_gantt.png | Figure 3.8: Gantt Chart of the Project | 6.2
+@h2 3.7 Chapter Summary
+This chapter presented the methodology adopted for the development of NetSeer. The RAD model was selected because it supports rapid prototyping, user involvement and iterative refinement, which suit a usability-focused system for non-expert users. The chapter described the four RAD phases, the functional and non-functional requirements, the four-part evaluation plan, the hardware and software requirements and the project planning. The next chapter presents the design and development of the proposed system.

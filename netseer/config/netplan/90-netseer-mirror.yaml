@@ -1,0 +1,9 @@
+# Mirror NIC for real-time mode: link up, no IP address (it only listens to the switch SPAN port).
+network:
+  version: 2
+  ethernets:
+    enxec1ac300527e:
+      dhcp4: false
+      dhcp6: false
+      link-local: []
+      optional: true

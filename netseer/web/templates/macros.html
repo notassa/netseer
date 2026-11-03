@@ -1,0 +1,35 @@
+{# Shared form and table helpers. #}
+
+{# Type-or-pick search box: a text input with a scrollable list of real values (native datalist). #}
+{% macro search_input(id, name, value, options, placeholder="", size=None) -%}
+<input id="{{ id }}" type="text" name="{{ name }}" value="{{ value or '' }}" list="{{ id }}-list" autocomplete="off"
+       placeholder="{{ placeholder }}"{% if size %} size="{{ size }}"{% endif %}>
+<datalist id="{{ id }}-list">{% for o in options %}<option value="{{ o }}">{% endfor %}</datalist>
+{%- endmacro %}
+
+{# Reset button for a sortable table (restores the original order or drops ?sort=). #}
+{% macro reset_sort(table_id) -%}
+<button class="btn" type="button" data-reset-sort="{{ table_id }}" title="Back to the default order">Reset order</button>
+{%- endmacro %}
+
+{# Risk band chip (Note / Low / Medium / High / Critical). #}
+{% macro band_chip(band) -%}
+<span class="band {{ (band or 'note') | lower }}">{{ band or 'not scored' }}</span>
+{%- endmacro %}
+
+{# Pager for a server-paged table (deps.paging): 20 rows per page, or "Show all" (?all=1, capped) and "Hide". #}
+{% macro pager(pg, qs, prev="Previous", next="Next", noun="rows") -%}
+{% if pg.pages > 1 or pg.show_all %}
+<div class="pager">
+  {% if pg.show_all %}
+  <span class="muted">{% if pg.total > pg.cap %}Showing the first {{ pg.cap }} of {{ pg.total }} {{ noun }}. Use the filters to narrow it down.{% else %}Showing all {{ pg.total }} {{ noun }}.{% endif %}</span>
+  <a class="btn small" href="?{{ qs }}">Hide</a>
+  {% else %}
+  {% if pg.page > 1 %}<a class="btn small" href="?{{ qs }}&page={{ pg.page - 1 }}">{{ prev }}</a>{% endif %}
+  <span class="muted">Page {{ pg.page }} of {{ pg.pages }} ({{ pg.total }} {{ noun }})</span>
+  {% if pg.page < pg.pages %}<a class="btn small" href="?{{ qs }}&page={{ pg.page + 1 }}">{{ next }}</a>{% endif %}
+  <a class="btn small" href="?{{ qs }}&all=1">Show all</a>
+  {% endif %}
+</div>
+{% endif %}
+{%- endmacro %}

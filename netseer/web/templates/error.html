@@ -1,0 +1,14 @@
+{% extends "layout.html" if user else "auth_base.html" %}
+{% block title %}{{ status_code }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ status_code }} — {{ title }}</h1>
+  <p>{{ detail }}</p>
+  <p><a href="/">Back to Home</a></p>
+</div>
+{% endblock %}
+{% block card %}
+<h1>{{ status_code }} — {{ title }}</h1>
+<p>{{ detail }}</p>
+<p><a href="/login">Sign in</a></p>
+{% endblock %}

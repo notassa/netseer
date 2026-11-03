@@ -1,0 +1,163 @@
+{% extends "layout.html" %}
+{% from "macros.html" import band_chip %}
+{% block title %}AI{% endblock %}
+{% macro refs(ids) -%}
+{% for r in ids %}<details class="ref"><summary>{{ r }}</summary><span>{{ result.facts.get(r, 'This ID is not in the evidence.') }}</span></details>{% endfor %}
+{%- endmacro %}
+{% block content %}
+<h1>AI explanation</h1>
+{% if not inc %}
+<div class="card"><p>No possible incidents yet. {% if selected %}This analysis has none.{% else %}Pick an analysis in the header first.{% endif %}</p></div>
+{% else %}
+<div class="card">
+  <form method="get" action="/ai" class="row-actions" style="align-items:center">
+    <label for="ai-incident" class="muted">Incident</label>
+    <select id="ai-incident" name="incident" onchange="this.form.submit()" style="max-width:100%">
+      {% for c in choices %}<option value="{{ c.id }}" {{ 'selected' if c.id == inc.id }}>{{ c.band }} · {{ '%.1f' | format(c.score or 0) }} · {{ c.title }}</option>{% endfor %}
+    </select>
+    <input type="hidden" name="intent" value="{{ intent }}">
+    <noscript><button class="btn small" type="submit">Open</button></noscript>
+  </form>
+  <p style="margin:.6rem 0">{{ band_chip(inc.band) }} <a href="/incidents/{{ inc.id }}">{{ inc.title }}</a></p>
+  <div class="row-actions" aria-label="Prompt Maker">
+    {% for key, (label, _) in intents.items() %}
+    <a class="btn small {{ 'primary' if key == intent }}" href="/ai?incident={{ inc.id }}&intent={{ key }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if result %}
+{% set v = result.verification %}
+<div class="card">
+  {% if result.outdated %}<p class="flash info" style="margin-top:0">Saved explanation. The evidence has changed since it was written (re-scored, new device type or rebuilt knowledge base); ask again for a fresh one.</p>{% endif %}
+  <p>
+    {% if v.passed %}<span class="badge ok">Verified</span>{% else %}<span class="badge warn">{{ result.flags | length }} flagged</span>{% endif %}
+    <span class="muted">{{ result.row.model }} · {{ '%.0f' | format(result.row.latency_s or 0) }} s · {{ result.row.created_at[:16] | replace('T', ' ') }} UTC{% if v.schema_retry %} · reply repaired once{% endif %}</span>
+  </p>
+  {% if result.out.raw is defined %}
+  <p>The model's reply could not be read as an explanation, even after one retry.</p>
+  <pre class="raw">{{ result.out.raw }}</pre>
+  {% else %}
+  {% for key, heading in sections %}
+  <h2>{{ heading }}</h2>
+  <p>{{ marked(result.out[key], result.flags) }}</p>
+  {% endfor %}
+  <h2>What to do</h2>
+  <ol>
+    {% for a in result.out.recommended_actions %}
+    <li><strong>{{ marked(a.action, result.flags) }}</strong> {{ marked(a.reason, result.flags) }} {{ refs(a.refs) }}</li>
+    {% endfor %}
+  </ol>
+  <h2>Claims and their evidence</h2>
+  <ul>
+    {% for c in result.out.claims %}<li>{{ marked(c.text, result.flags) }} {{ refs(c.refs) }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if result.flags %}
+  <h2>Verifier flags</h2>
+  <ul>{% for f in result.flags %}<li><strong>{{ check_names[f.check] }}:</strong> {{ f.detail }}{% if f.text %} — <span class="muted">“{{ f.text }}”</span>{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  <details>
+    <summary>Evidence package ({{ result.evidence.facts | length }} facts, {{ result.evidence.knowledge | length }} knowledge items)</summary>
+    <ul>
+      {% for f in result.evidence.facts %}<li><strong>{{ f.id }}</strong> {{ f.text }}</li>{% endfor %}
+      {% for k in result.evidence.knowledge %}<li><strong>{{ k.id }}</strong> {{ k.title }}: {{ k.text }}{% if k.url %} <a href="{{ k.url }}" rel="noopener noreferrer" target="_blank">source</a>{% endif %}</li>{% endfor %}
+    </ul>
+    {% if result.evidence.unknowns %}<p class="muted">Unknown: {{ result.evidence.unknowns | join(' ') }}</p>{% endif %}
+  </details>
+</div>
+{% else %}
+<div class="card" id="ai-job" data-incident="{{ inc.id }}" data-intent="{{ intent }}" data-state="{{ state.state }}">
+  <p id="ai-status">
+    {% if state.state == 'running' %}Generating… on this CPU it takes about a minute or two.
+    {% elif state.state == 'failed' %}The explanation failed: {{ state.error }}
+    {% else %}No explanation for this question yet.{% endif %}
+  </p>
+  <div id="ai-progress" {{ 'hidden' if state.state != 'running' }}>
+    <div class="stage-label"><span>Generating (estimate from past runs)</span><span id="ai-pct">{{ state.percent or 0 }}%</span></div>
+    <div class="progress determinate"><div id="ai-bar" style="width:{{ state.percent or 0 }}%"></div></div>
+  </div>
+  <p style="margin-bottom:0"><button class="btn {{ 'danger' if state.state == 'running' else 'primary' }}" type="button" id="ai-start">
+    {{ 'Stop' if state.state == 'running' else 'Try again' if state.state == 'failed' else 'Explain with AI' }}</button></p>
+</div>
+<script>
+// One button: "Explain with AI" while idle, "Stop" while the model is generating.
+(function () {
+  const box = document.getElementById("ai-job");
+  const status = document.getElementById("ai-status");
+  const btn = document.getElementById("ai-start");
+  const progress = document.getElementById("ai-progress");
+  const url = `/api/incidents/${box.dataset.incident}/explain`;
+  let running = box.dataset.state === "running";
+  const show = pct => { progress.hidden = false; document.getElementById("ai-pct").textContent = `${pct}%`;
+                        document.getElementById("ai-bar").style.width = `${pct}%`; };
+  const mode = (isRunning, label) => {
+    running = isRunning;
+    btn.textContent = isRunning ? "Stop" : label;
+    btn.classList.toggle("danger", isRunning);
+    btn.classList.toggle("primary", !isRunning);
+    if (!isRunning) progress.hidden = true;
+  };
+  const post = path => {
+    const body = new FormData();
+    body.append("intent", box.dataset.intent);
+    body.append("csrf_token", csrfToken());
+    return fetch(path, { method: "POST", body });
+  };
+  async function poll() {
+    if (!running) return;
+    try {
+      const s = await getJSON(`${url}?intent=${encodeURIComponent(box.dataset.intent)}`);
+      if (s.state === "done") { show(100); return location.reload(); }
+      if (s.state === "running" && s.percent != null) show(s.percent);
+      if (s.state === "failed") { status.textContent = `The explanation failed: ${s.error}`; return mode(false, "Try again"); }
+    } catch (e) { /* keep polling through a restart */ }
+    setTimeout(poll, 3000);
+  }
+  btn.addEventListener("click", async () => {
+    if (running) {
+      await post(`${url}/stop`);
+      status.textContent = "Stopped. Nothing was saved.";
+      return mode(false, "Explain with AI");
+    }
+    status.textContent = "Generating… on this CPU it takes about a minute or two.";
+    mode(true);
+    show(0);
+    const r = await post(url);
+    if (!r.ok) { status.textContent = `Could not start: ${r.status}`; return mode(false, "Explain with AI"); }
+    poll();
+  });
+  if (running) poll();
+})();
+</script>
+{% endif %}
+{% endif %}
+
+{% if history %}
+<div class="table-tools"><h2>Saved explanations</h2>
+{% if user.role == "admin" %}
+<form method="post" action="/ai/history/clear" onsubmit="return confirm('Delete every saved explanation of this analysis?')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <button class="btn small danger" type="submit">Clear saved explanations</button>
+</form>{% endif %}</div>
+<p class="muted">Every explanation generated for this analysis is kept until cleared. Open one to read it again.</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Time (UTC)</th><th>Incident</th><th>Question</th><th>Model</th><th>Seconds</th><th>Check</th><th></th></tr></thead>
+  <tbody>
+  {% for h in history %}
+  <tr>
+    <td>{{ h.created_at[:16] | replace('T', ' ') }}</td>
+    <td>{{ band_chip(h.band) }} {{ h.title }}</td>
+    <td>{{ intents[h.intent][0] if h.intent in intents else h.intent }}</td>
+    <td>{{ h.model }}</td>
+    <td>{{ '%.0f' | format(h.latency_s or 0) }}</td>
+    <td>{% if h.flags %}<span class="badge warn">{{ h.flags }} flagged</span>{% else %}<span class="badge ok">Verified</span>{% endif %}</td>
+    <td><a class="btn small" href="/ai?interpretation={{ h.id }}">Open</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "auth_base.html" %}
+{% block title %}Create administrator{% endblock %}
+{% block card %}
+<h1>Create administrator</h1>
+<p class="muted">This is the first launch. Create the administrator account. It can manage NetSeer and create one view-only user.</p>
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+<form method="post" action="/setup" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="username">Username</label>
+  <input id="username" name="username" type="text" required maxlength="64" value="{{ username or '' }}" autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required minlength="15" maxlength="128">
+  <div class="field-hint">At least 15 characters. A long passphrase is best. Common passwords and your username are not allowed.</div>
+  <label for="confirm">Confirm password</label>
+  <input id="confirm" name="confirm" type="password" required minlength="15" maxlength="128">
+  <button class="btn primary" type="submit">Create administrator</button>
+</form>
+{% endblock %}

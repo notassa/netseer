@@ -1,0 +1,266 @@
+{% extends "layout.html" %}
+{% from "macros.html" import reset_sort %}
+{% block title %}Network{% endblock %}
+{% block content %}
+<h1>Network</h1>
+
+<div class="grid">
+  <div class="card">
+    <h2 style="margin-top:0">Offline analysis</h2>
+    <p class="muted">Upload one packet capture (.pcap / .pcapng) at a time into a <strong>session</strong>. Add more files to the same session later: all its files are merged in time order into one longer analysis.</p>
+    {% if user.role == "admin" %}
+    <form id="upload-form">
+      <label for="upload-session">Session</label>
+      <select id="upload-session" style="width:100%">
+        <option value="">New session</option>
+        {% for a in sessions %}<option value="{{ a.id }}" {{ 'selected' if selected and selected.id == a.id }}>Add to: {{ a.name }} ({{ a.n_files }} file{{ 's' if a.n_files != 1 }})</option>{% endfor %}
+      </select>
+      <label for="upload-file">Capture file</label>
+      <input type="file" id="upload-file" accept=".pcap,.pcapng,.cap" required>
+      <div class="field-hint">Up to {{ max_upload_mb }} MB. Keep this page open while the file uploads.</div>
+      <label style="font-weight:normal"><input type="checkbox" id="upload-analyse" checked> Analyse after upload (untick to add more files first)</label>
+      <p><button class="btn primary" type="submit" id="upload-btn">Upload</button></p>
+    </form>
+    <div id="upload-status" hidden>
+      <div class="stage-label"><span id="upload-label">Uploading…</span><span id="upload-pct"></span></div>
+      <div class="progress determinate"><div id="upload-bar"></div></div>
+      <div class="field-hint" id="upload-detail"></div>
+    </div>
+    {% else %}
+    <p class="muted">Only the administrator can upload captures.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Real-time analysis</h2>
+    <p class="muted">Watch live traffic from the switch's mirror port. Choose the mirror and LAN network cards, then NetSeer waits for links and traffic before it starts. Each session (start → stop) is its own analysis.</p>
+    {% if user.role != "admin" %}<p class="muted">Only the administrator can start a live session.</p>
+    {% elif live_open %}<p class="muted">A live session is open below. Stop it before opening another.</p>
+    {% else %}
+    <form method="post" action="/network/live">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% for field, title, hint in [("mirror", "Mirror NIC (switch SPAN port)", "No IP address; it only listens."),
+                                    ("lan", "LAN NIC (dashboard access)", "The card this page is reached through.")] %}
+      <label for="live-{{ field }}">{{ title }}</label>
+      <select id="live-{{ field }}" name="{{ field }}" style="width:100%">
+        {% for n in nics %}<option value="{{ n.name }}" {{ 'selected' if (field == 'lan') == n.has_ipv4 }}>{{ n.name }} · {{ 'link up' if n.carrier else 'no link' }}{{ ' · has IP' if n.has_ipv4 }}</option>{% endfor %}
+      </select>
+      <div class="field-hint">{{ hint }}</div>
+      {% endfor %}
+      <p><button class="btn primary" type="submit">Open live session</button></p>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="table-tools"><h2>Analyses</h2>{% if rows %}{{ reset_sort("analyses") }}{% endif %}</div>
+{% if not rows %}
+<div class="card muted">No analyses yet. Upload a capture to start.</div>
+{% else %}
+<div class="table-wrap">
+<table class="data sortable" id="analyses">
+  <thead><tr><th data-key="name">Name</th><th data-key="mode">Mode</th><th data-key="status">Status</th><th data-key="created">Created (UTC)</th><th data-key="files">Files</th><th data-key="events">Events</th><th data-key="alerts">Alerts</th><th data-key="note">Note</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr data-id="{{ a.id }}" data-status="{{ a.status }}">
+    <td data-sort="{{ a.name }}">
+      <form method="post" action="/network/analyses/{{ a.id }}/rename" class="row-actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="text" name="name" value="{{ a.name }}" maxlength="120" style="min-width:280px" aria-label="Analysis name">
+        <button class="btn small" type="submit">Rename</button>
+      </form>
+      {% if selected and selected.id == a.id %}<span class="badge info" style="margin-top:.3rem">selected</span>{% endif %}
+    </td>
+    <td>{{ a.mode }}</td>
+    <td>
+      <span class="badge {{ a.status | status_class }} js-status">{{ a.status | replace('_', ' ') }}</span>
+      {% if a.mode == "live" and a.status in active_statuses %}
+      <div class="muted js-message" style="max-width:260px">{{ live_message(a) }}</div>
+      {% if user.role == "admin" %}
+      <div class="row-actions" style="margin-top:.3rem">
+        {% if a.status == "ready" %}
+        <form method="post" action="/network/live/{{ a.id }}/start"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn small primary" type="submit">Start capture</button></form>{% endif %}
+        <form method="post" action="/network/live/{{ a.id }}/stop" onsubmit="return confirm('Stop this live session? Its data is kept.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn small danger" type="submit">Stop</button></form>
+      </div>
+      {% endif %}
+      {% elif a.status in active_statuses %}
+      <div class="stage-label"><span class="js-stage"></span><span class="js-pct"></span></div>
+      <div class="progress js-bar"><div></div></div>
+      {% if user.role == "admin" and a.status != "uploading" %}
+      <button class="btn small danger js-stop" type="button" style="margin-top:.3rem"
+              title="Stop this run, clear its results and keep the capture for a re-run">Stop</button>
+      {% endif %}
+      {% endif %}
+      {% if a.error %}<div class="muted" style="max-width:260px">{{ a.error }}</div>{% endif %}
+    </td>
+    <td>{{ a.created_at[:16] | replace('T', ' ') }}</td>
+    <td data-sort="{{ a.total_size }}">
+      <details><summary>{{ a.n_files }} file{{ 's' if a.n_files != 1 }}{% if a.total_size %} <span class="muted">({{ (a.total_size / 1048576) | round(1) }} MB)</span>{% endif %}</summary>
+        {% for f in files.get(a.id, []) %}<div class="muted row-actions" style="white-space:nowrap;align-items:center">{{ loop.index }}. {{ f.filename }} · {{ (f.size / 1048576) | round(1) }} MB · <span title="SHA-256 {{ f.sha256 }}">{{ f.sha256[:12] }}…</span>
+          {% if user.role == "admin" and a.status not in active_statuses %}
+          <form method="post" action="/network/analyses/{{ a.id }}/files/delete"
+                onsubmit="return confirm('Delete {{ f.filename }}? {{ 'This is the last file: the whole session is deleted.' if files[a.id] | length == 1 else 'The session results are cleared; press Analyse to re-run with the other files.' }}')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="filename" value="{{ f.filename }}">
+            <button class="btn small danger" type="submit" title="Delete this capture file">Delete</button></form>{% endif %}</div>{% endfor %}
+      </details>
+    </td>
+    <td class="js-events">{{ a.n_events }}</td>
+    <td class="js-alerts">{{ a.n_alerts }}</td>
+    <td data-sort="{{ a.note or '' }}">
+      {% if user.role == "admin" %}
+      <form method="post" action="/network/analyses/{{ a.id }}/note">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <textarea name="note" maxlength="1000" rows="2" style="min-width:180px" aria-label="Note for {{ a.name }}">{{ a.note or '' }}</textarea>
+        <div><button class="btn small" type="submit">Save note</button></div>
+      </form>
+      {% else %}<span style="white-space:pre-wrap">{{ a.note or '' }}</span>{% endif %}
+    </td>
+    <td>
+      <div class="row-actions">
+        <form method="post" action="/analyses/select">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="analysis_id" value="{{ a.id }}">
+          <input type="hidden" name="next" value="{{ '/devices' if a.status == 'awaiting_attribution' else '/alerts' }}">
+          <button class="btn small primary" type="submit">Open</button>
+        </form>
+        {% if user.role == "admin" and a.status not in active_statuses %}
+        {% if a.mode == "offline" %}
+        <form method="post" action="/network/analyses/{{ a.id }}/rerun" onsubmit="return confirm('Analyse all files of this session? Current results and device types for this analysis are replaced.')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn small {{ 'primary' if a.status == 'pending' }}" type="submit">{{ 'Analyse' if a.status == 'pending' else 'Re-analyse' }}</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/network/analyses/{{ a.id }}/delete" onsubmit="return confirm('Delete this analysis and its stored files?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn small danger" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% set notes = info.get(a.id, []) %}
+  {% if notes %}
+  {% set warns = notes | selectattr("level", "equalto", "warning") | list %}
+  <tr class="child-row"><td colspan="9">
+    <details class="info-list"{% if warns %} open{% endif %}><summary>Info ({{ notes | length }}){% if warns %} <span class="badge warn">{{ warns | length }} to check</span>{% endif %}</summary>
+      <ul>{% for n in notes %}<li><span class="badge {{ 'warn' if n.level == 'warning' else 'info' }}">{{ n.level }}</span> {{ n.title }}</li>{% endfor %}</ul>
+    </details>
+  </td></tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Poll running jobs. When the selected analysis finishes and awaits attribution, open Devices (its modal);
+// otherwise reload to show the final status.
+(function () {
+  const active = {{ active_statuses | list | tojson }};
+  const selectedId = {{ (selected.id if selected else none) | tojson }};
+  const rows = [...document.querySelectorAll("#analyses tr[data-id]")].filter(r => active.includes(r.dataset.status));
+  if (!rows.length) return;
+  const timer = setInterval(async () => {
+    for (const row of rows) {
+      try {
+        const s = await getJSON(`/api/analyses/${row.dataset.id}/status`);
+        if (s.message !== null && s.status !== row.dataset.status) { location.reload(); return; }   // live: new buttons
+        row.querySelector(".js-status").textContent = s.status.replaceAll("_", " ");
+        row.querySelector(".js-events").textContent = s.n_events;
+        row.querySelector(".js-alerts").textContent = s.n_alerts;
+        const p = s.progress, bar = row.querySelector(".js-bar");
+        if (p && bar) {
+          row.querySelector(".js-stage").textContent = p.stage;
+          row.querySelector(".js-pct").textContent = p.pct == null ? "" : `${p.pct.toFixed(0)}%`;
+          bar.classList.toggle("determinate", p.pct != null);
+          bar.firstElementChild.style.width = p.pct == null ? "" : `${p.pct}%`;
+        }
+        if (!active.includes(s.status)) {
+          clearInterval(timer);
+          if (s.status === "awaiting_attribution" && s.id === selectedId) location.href = "/devices";
+          else location.reload();
+          return;
+        }
+      } catch (e) { /* transient; try again next tick */ }
+    }
+  }, 2000);
+})();
+
+// Stop: the job stops within about a second; the poller above then reloads the page.
+document.querySelectorAll(".js-stop").forEach(btn => btn.addEventListener("click", async () => {
+  if (!confirm("Stop this analysis? Its results so far are deleted; the capture files stay for a re-run.")) return;
+  btn.disabled = true;
+  btn.textContent = "Stopping…";
+  const r = await fetch(`/api/analyses/${btn.closest("tr").dataset.id}/stop`,
+                        { method: "POST", headers: { "X-CSRF-Token": csrfToken() } });
+  if (!r.ok) { btn.disabled = false; btn.textContent = "Stop"; alert((await r.json().catch(() => ({}))).detail || "Stop failed."); }
+}));
+
+// Upload: announce files, stream each one as a raw PUT with a progress bar, then start the analysis.
+(function () {
+  const form = document.getElementById("upload-form");
+  if (!form) return;
+  const MB = 1048576, maxBytes = {{ max_upload_mb }} * MB;
+  const $ = id => document.getElementById(id);
+  // "Analyse after upload" keeps its last state in this browser.
+  try { const kept = localStorage.getItem("netseer.analyseAfterUpload"); if (kept !== null) $("upload-analyse").checked = kept === "1"; } catch (e) { /* storage off */ }
+  $("upload-analyse").addEventListener("change", e => { try { localStorage.setItem("netseer.analyseAfterUpload", e.target.checked ? "1" : "0"); } catch (err) { /* storage off */ } });
+  const call = async (method, url, body) => {
+    const r = await fetch(url, { method, body: body && JSON.stringify(body),
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() } });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || `${r.status} ${r.statusText}`);
+    return data;
+  };
+  const put = (url, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("X-CSRF-Token", csrfToken());
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = e => onProgress(e.loaded);
+    xhr.onload = () => xhr.status < 300 ? resolve()
+      : reject(new Error((() => { try { return JSON.parse(xhr.responseText).detail; } catch { return xhr.statusText; } })()));
+    xhr.onerror = () => reject(new Error("Network error during upload."));
+    xhr.send(file);
+  });
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = $("upload-file").files[0];
+    if (!f) return;
+    if (f.size > maxBytes) { alert(`${f.name} is larger than {{ max_upload_mb }} MB.`); return; }
+    const session = $("upload-session").value, analyse = $("upload-analyse").checked;
+    $("upload-btn").disabled = true;
+    $("upload-status").hidden = false;
+    window.onbeforeunload = () => "An upload is in progress.";
+    const started = performance.now(), total = f.size || 1;
+    const show = sent => {
+      const pct = 100 * sent / total, secs = (performance.now() - started) / 1000;
+      const rate = sent / MB / Math.max(secs, 0.1), eta = rate > 0 ? (total - sent) / MB / rate : 0;
+      $("upload-label").textContent = `Uploading ${f.name}`;
+      $("upload-pct").textContent = `${pct.toFixed(0)}%`;
+      $("upload-bar").style.width = `${pct}%`;
+      $("upload-detail").textContent =
+        `${(sent / MB).toFixed(0)} of ${(total / MB).toFixed(0)} MB · ${rate.toFixed(1)} MB/s · about ${Math.ceil(eta)} s left`;
+    };
+    try {
+      const { id } = await call("POST", "/api/uploads",
+        { name: f.name, size: f.size, analysis_id: session ? Number(session) : null });
+      await put(`/api/analyses/${id}/file`, f, show);
+      $("upload-label").textContent = analyse ? "Upload complete. Starting analysis…" : "Upload complete.";
+      await call("POST", `/api/analyses/${id}/start`, { analyse });
+      window.onbeforeunload = null;
+      location.reload();
+    } catch (err) {
+      window.onbeforeunload = null;
+      $("upload-label").textContent = `Upload failed: ${err.message}`;
+      $("upload-btn").disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

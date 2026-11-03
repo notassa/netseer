@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set nav = [
+  ("home", "/", "Home", false, "M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"),
+  ("network", "/network", "Network", false, "M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"),
+  ("alerts", "/alerts", "Alerts", false, "M12 3l10 18H2zM12 10v5M12 18h.01"),
+  ("incidents", "/incidents", "Incidents", false, "M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"),
+  ("devices", "/devices", "Devices", false, "M3 5h18v11H3zM8 20h8M12 16v4"),
+  ("ai", "/ai", "AI", true, "M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9 22h6"),
+  ("information", "/information", "Information", false, "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 11v6M12 7h.01"),
+  ("settings", "/settings", "Settings", false, "M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4"),
+] %}
+{% macro icon(d) %}<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ d }}"/></svg>{% endmacro %}
+{% block body %}
+<div class="app">
+  <aside class="sidebar">
+    <button class="brand" id="sidebar-toggle" type="button" aria-label="Show or hide the menu" title="Show or hide the menu"><span class="label">Net<span>Seer</span></span><span class="brand-mini" aria-hidden="true">N<span>S</span></span></button>
+    <nav class="nav">
+      {% for key, href, label, later, d in nav if key != "information" or user.role == "admin" %}
+      <a href="{{ href }}" class="{{ 'active' if active == key }}{{ ' later' if later }}" title="{{ label }}">{{ icon(d) }}<span class="label">{{ label }}</span></a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+      <div class="label">{{ user.username }} <span class="muted">({{ user.role }})</span></div>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn small logout" type="submit" title="Log out">{{ icon("M15 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3") }}<span class="label">Log out</span></button>
+      </form>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      {% if active not in ("settings", "information") %}
+      <form method="post" action="/analyses/select" id="analysis-select-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <label for="analysis-select" style="display:inline;margin:0 .4rem 0 0">Analysis</label>
+        <select id="analysis-select" name="analysis_id" onchange="this.form.submit()">
+          {% if not analyses %}<option value="">No analyses yet</option>{% endif %}
+          {% if analyses and not selected %}<option value="" selected>Choose an analysis…</option>{% endif %}
+          {% for a in analyses %}
+          <option value="{{ a.id }}" {{ 'selected' if selected and selected.id == a.id }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% if selected %}<span class="badge {{ selected.status | status_class }}">{{ selected.status | replace('_', ' ') }}</span>{% endif %}
+      {% endif %}
+      <div class="spacer"></div>
+      {% set sess = request.state.session %}
+      {% if sess and sess.expires_at %}
+      <span class="session-timer" id="session-timer" data-remaining="{{ session_remaining }}" title="Time left before you are signed out">
+        {{ icon("M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2") }}<span id="session-left">10:00</span>
+      </span>
+      <button class="btn small" type="button" id="session-extend">Extend 10 min</button>
+      {% endif %}
+      <span class="muted">{{ now_local }}</span>
+    </header>
+    <main class="content">
+      {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}
+      {% if selected and selected.mode == "live" and selected.error and selected.status == "waiting_interfaces" %}
+      <div class="flash error">{{ selected.error }} Waiting for the links to come back.</div>{% endif %}
+      {% if live_new_devices %}<div class="flash info">{{ live_new_devices }} new device{{ 's' if live_new_devices != 1 }} seen
+        on the live network. <a href="/devices">Attribute {{ 'them' if live_new_devices != 1 else 'it' }}</a>.</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% block modals %}{% endblock %}
+<script src="/static/js/app.js"></script>
+<script>
+// Column tooltips: what each table head truly holds (also for tables built later by scripts).
+(function () {
+  const help = {{ column_help | tojson }};
+  const label = () => document.querySelectorAll("th:not([title])").forEach(th => {
+    const text = th.textContent.trim();
+    if (help[text]) th.title = help[text];
+  });
+  label();
+  new MutationObserver(label).observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+{% block scripts %}{% endblock %}
+{% endblock %}

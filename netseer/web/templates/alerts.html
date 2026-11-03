@@ -1,0 +1,194 @@
+{% extends "layout.html" %}
+{% from "macros.html" import search_input, reset_sort, pager %}
+{% block title %}Alerts{% endblock %}
+{% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
+{% block content %}
+<h1>Alerts</h1>
+{% if not selected %}
+<div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
+{% else %}
+<datalist id="bin-choices">{% for m in [1, 5, 10, 15, 30, 60, 120, 360, 720, 1440] %}<option value="{{ m }}">{% endfor %}</datalist>
+{% macro series_card(key, title, rows, empty) %}
+  <div class="card">
+    <h2 style="margin-top:0">{{ title }} per <span class="js-bin-label">{{ bin_minutes }}</span> minutes</h2>
+    {% if rows %}
+    <form class="row-actions js-bin-form" data-series="{{ key }}" style="margin-bottom:.5rem">
+      <label for="bin-{{ key }}" style="margin:0">Bin size (minutes)</label>
+      <input id="bin-{{ key }}" type="number" min="1" max="1440" value="{{ bin_minutes }}" list="bin-choices" style="width:6rem">
+      <button class="btn small primary" type="submit">Update</button>
+    </form>
+    <div class="chart-box"><canvas id="{{ key }}-chart"></canvas></div>
+    {% else %}<p class="muted">{{ empty }}</p>{% endif %}
+  </div>
+{% endmacro %}
+<div class="grid">
+{{ series_card("packets", "Packets", packets, "No flow records yet.") }}
+{{ series_card("alerts", "Alerts", alert_counts, "No alerts in this analysis.") }}
+  <div class="card">
+    <h2 style="margin-top:0">Detected Alert Classes</h2>
+    {% if total or mix.classtype %}
+    <div class="row-actions" style="margin-bottom:.5rem">
+      <button class="btn small primary" data-mix="classtype">By classtype</button>
+      <button class="btn small" data-mix="priority">By priority</button>
+    </div>
+    <div class="chart-box"><canvas id="mix-chart"></canvas></div>
+    <div class="field-hint">How the alerts divide up (not risk). A large share does not mean high risk; risk is scored per incident.</div>
+    {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Top 5 devices by alerts</h2>
+    {% if top_devices %}
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Device</th>
+        <th>Type</th>
+        <th>Sent</th>
+        <th>Received</th>
+        <th>Total</th></tr></thead>
+      <tbody>{% for d in top_devices %}
+        <tr><td>{{ d.ip }}{% if d.hostname %} <span class="muted">{{ d.hostname }}</span>{% endif %}</td>
+          <td>{{ device_types.get(d.type, d.type) }}</td>
+          <td><a href="/alerts?src_ip={{ d.ip | urlencode }}">{{ d.sent }}</a></td>
+          <td><a href="/alerts?dest_ip={{ d.ip | urlencode }}">{{ d.received }}</a></td><td>{{ d.total }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="muted">No device is involved in an alert.</p>{% endif %}
+  </div>
+</div>
+
+<h2>Alert table <span class="muted" style="font-weight:normal">({{ total }} matching)</span></h2>
+<details class="filter-frame" {{ 'open' if n_filters }}>
+<summary>Filters{% if n_filters %} <span class="badge info">{{ n_filters }} active</span>{% endif %}</summary>
+<form method="get" action="/alerts">
+  <div class="filters">
+    <div><label for="f-q">Search</label>{{ search_input("f-q", "q", params.q, options.signature, "signature or class") }}</div>
+    <div><label for="f-src">Source IP</label>{{ search_input("f-src", "src_ip", params.src_ip, options.src_ip, "", 15) }}</div>
+    <div><label for="f-dst">Destination IP</label>{{ search_input("f-dst", "dest_ip", params.dest_ip, options.dest_ip, "", 15) }}</div>
+    <div><label for="f-sid">SID</label>{{ search_input("f-sid", "sid", params.sid, options.sid, "", 9) }}</div>
+  </div>
+  {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
+  <div class="tick-groups">
+  {% for key, title in [("priority", "Priority"), ("sig_severity", "Severity"), ("direction", "Direction"), ("classtype", "Class")] %}
+    <fieldset><legend>{{ title }}</legend>
+      {% for v in ticks[key] %}<label><input type="checkbox" name="{{ key }}" value="{{ v }}" {{ 'checked' if v | string in params.get(key, []) }}> {{ v }}</label>{% endfor %}
+    </fieldset>
+  {% endfor %}
+  </div>
+  <div class="row-actions"><button class="btn primary" type="submit">Filter</button> <a class="btn" href="/alerts">Clear</a> {{ reset_sort("alerts-table") }}</div>
+</form>
+</details>
+<div class="table-wrap">
+<table class="data sortable" id="alerts-table" data-server-sort>
+  <thead><tr><th data-key="time">Time (UTC)</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="priority">Priority</th><th data-key="severity">Severity</th><th data-key="direction">Direction</th></tr></thead>
+  <tbody>
+  {% for a in rows %}
+  <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
+    <td>{{ a.ts[:19] | replace('T', ' ') if a.ts else '' }}</td>
+    <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
+    <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
+    <td>{{ a.proto or '' }}{% if a.app_proto %}/{{ a.app_proto }}{% endif %}</td>
+    <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
+    <td>{{ unk(a.classtype) }}</td>
+    <td>{{ unk(a.priority) }}</td>
+    <td>{{ unk(a.sig_severity) }}</td>
+    <td>{{ unk(a.direction) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" class="muted">No alerts match.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pager(pg, qs, noun="alerts") }}
+{% endif %}
+{% endblock %}
+
+{% block modals %}
+<aside class="drawer" id="raw-drawer" aria-label="Raw alert">
+  <header><strong>Raw eve.json record</strong><button class="btn small" id="raw-close">Close</button></header>
+  <pre id="raw-body"></pre>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+{% if selected %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const text = css.getPropertyValue("--muted").trim(), grid = css.getPropertyValue("--border").trim();
+  const accent = css.getPropertyValue("--accent").trim();
+  Chart.defaults.color = text; Chart.defaults.borderColor = grid;
+
+  // Packets and alerts per x minutes: each chart has its own bin size and Update button.
+  const series = { packets: [{{ packets | tojson }}, "packets", accent],
+                   alerts: [{{ alert_counts | tojson }}, "alert-series", css.getPropertyValue("--danger").trim()] };
+  document.querySelectorAll(".js-bin-form").forEach(form => {
+    const key = form.dataset.series, [rows, api, color] = series[key];
+    const chart = new Chart(document.getElementById(`${key}-chart`), {
+      type: "line",
+      data: { labels: rows.map(p => p.t),
+              datasets: [{ label: key, data: rows.map(p => p[key]), borderColor: color,
+                           backgroundColor: color, tension: 0.2, pointRadius: 3 }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+                 scales: { y: { beginAtZero: true, title: { display: true, text: key } } } }
+    });
+    form.addEventListener("submit", async e => {
+      e.preventDefault();
+      const m = Math.min(1440, Math.max(1, parseInt(form.querySelector("input").value, 10) || 60));
+      const fresh = await getJSON(`/api/analyses/{{ selected.id }}/${api}?minutes=${m}`);
+      chart.data.labels = fresh.map(p => p.t);
+      chart.data.datasets[0].data = fresh.map(p => p[key]);
+      chart.update();
+      form.closest(".card").querySelector(".js-bin-label").textContent = m;
+    });
+  });
+
+  const mix = {{ mix | tojson }};
+  const mixCanvas = document.getElementById("mix-chart");
+  if (mixCanvas) {
+    const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `priority ${key}` : key);
+    const palette = [1, 2, 3, 4, 5, 6, 7, 8].map(i => css.getPropertyValue(`--chart-${i}`).trim());
+    const SLICES = 7;                       // the rest is folded into "other" so the pie stays readable
+    const narrow = () => mixCanvas.parentElement.clientWidth < 520;
+    const chart = new Chart(mixCanvas, {
+      type: "pie", data: { labels: [], datasets: [{ data: [], borderColor: css.getPropertyValue("--surface").trim() }] },
+      options: { maintainAspectRatio: false,
+                 plugins: { legend: { position: narrow() ? "bottom" : "right",
+                                      labels: { boxWidth: 12, font: { size: 11 }, generateLabels: c => Chart.overrides.pie.plugins.legend.labels
+                                        .generateLabels(c).map(item => {
+                                          const name = item.text.length > 24 ? item.text.slice(0, 23) + "…" : item.text;
+                                          return { ...item, text: `${name} — ${c.data.datasets[0].data[item.index].toFixed(1)}%` };
+                                        }) } },
+                            tooltip: { callbacks: { label: c => ` ${c.raw.toFixed(1)}% (${c.dataset.counts[c.dataIndex]} alerts)` } } },
+                 onResize: c => { c.options.plugins.legend.position = narrow() ? "bottom" : "right"; } }
+    });
+    const show = kind => {
+      let items = mix[kind].map(m => ({ label: label(kind, m.key), share: m.share * 100, count: m.count }));
+      if (items.length > SLICES + 1) {
+        const rest = items.slice(SLICES);
+        items = items.slice(0, SLICES).concat([{ label: `other (${rest.length})`,
+          share: rest.reduce((s, m) => s + m.share, 0), count: rest.reduce((s, m) => s + m.count, 0) }]);
+      }
+      chart.data.labels = items.map(m => m.label);
+      const ds = chart.data.datasets[0];
+      ds.data = items.map(m => m.share);
+      ds.counts = items.map(m => m.count);
+      ds.backgroundColor = items.map((m, i) => palette[i < SLICES ? i : 7]);
+      chart.update();
+      document.querySelectorAll("[data-mix]").forEach(b => b.classList.toggle("primary", b.dataset.mix === kind));
+    };
+    document.querySelectorAll("[data-mix]").forEach(b => b.addEventListener("click", () => show(b.dataset.mix)));
+    show("classtype");
+  }
+
+  const drawer = document.getElementById("raw-drawer"), body = document.getElementById("raw-body");
+  document.querySelectorAll("tr[data-alert]").forEach(row => row.addEventListener("click", async () => {
+    body.textContent = "Loading…"; drawer.classList.add("open");
+    try { body.textContent = JSON.stringify(await getJSON(`/api/alerts/${row.dataset.alert}`), null, 2); }
+    catch (e) { body.textContent = `Could not load the record: ${e.message}`; }
+  }));
+  document.getElementById("raw-close").addEventListener("click", () => drawer.classList.remove("open"));
+})();
+</script>
+{% endif %}
+{% endblock %}

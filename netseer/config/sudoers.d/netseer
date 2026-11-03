@@ -1,0 +1,4 @@
+# NetSeer may only start/stop its live capture unit on the mirror NIC and run suricata-update with no arguments
+# (CONCEPTS A9, A15). Install with visudo -c.
+netseer ALL=(root) NOPASSWD: /usr/bin/systemctl start netseer-live@enxec1ac300527e.service, /usr/bin/systemctl stop netseer-live@enxec1ac300527e.service
+netseer ALL=(root) NOPASSWD: /usr/bin/suricata-update ""

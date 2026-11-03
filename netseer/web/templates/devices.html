@@ -1,0 +1,323 @@
+{% extends "layout.html" %}
+{% from "macros.html" import search_input, reset_sort, pager %}
+{% block title %}Devices{% endblock %}
+{% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
+{% macro svc(s) %}<span class="badge">{{ s.port }}/{{ s.proto }}{% if s.app %} {{ s.app }}{% endif %}</span> {% endmacro %}
+{# First 3 services; the rest fold into a click-to-expand list so long rows stay short. #}
+{% macro services(list) %}{% for s in list[:3] %}{{ svc(s) }}{% else %}<span class="unknown">none seen</span>{% endfor %}
+{%- if list | length > 3 %}<details class="more"><summary>+{{ list | length - 3 }} more</summary>{% for s in list[3:] %}{{ svc(s) }}{% endfor %}</details>{% endif %}{% endmacro %}
+{% block content %}
+<h1>Devices</h1>
+{% if not selected %}
+<div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
+{% else %}
+{% if pending %}
+<div class="flash info">
+  {{ pending | length }} device{{ 's' if pending | length != 1 }} not attributed yet. Telling NetSeer what each device is makes the risk scores fit your network.
+  {% if user.role == "admin" %}<button class="btn small primary" type="button" id="open-attribution">Attribute devices</button>
+  {% else %}The administrator can set device types.{% endif %}
+</div>
+{% endif %}
+<h2>Network map</h2>
+<div class="card netmap-card">
+  <div class="row-actions" style="margin-bottom:.6rem">
+    <button class="btn small" type="button" id="map-fit">Fit</button>
+    <button class="btn small" type="button" id="map-reset">Reset layout</button>
+    <span class="muted" id="map-summary"></span>
+  </div>
+  <div class="netmap-wrap">
+    <div id="netmap" class="netmap" aria-label="Network map"></div>
+    <aside class="netmap-panel" id="map-panel"><p class="muted">Internet → networks → gateway → hosts. Left-click a host to select it and see its alert links (red); left-click empty space to hide them. Hold the right button and drag to move the map. Left-drag a node to move it with everything under it. Scroll to zoom.</p></aside>
+  </div>
+  <div class="field-hint">Coloured circles are your devices (by risk), grey circles hosts of networks found in the traffic, diamonds outside sources; red links (shown for the clicked host) carried alerts, thicker ones more data.</div>
+</div>
+
+<div class="table-tools"><h2>Networks</h2>{{ reset_sort("networks-table") }}</div>
+<p class="muted">Probable subnets and VLANs, with the evidence for each. "Looks local" means the traffic shows hosts there talking to other networks outside your LAN CIDRs, so the capture was taken inside that network; add it under Settings → NetSeer configuration → LAN CIDRs and re-analyse to score it as your own.</p>
+<div class="table-wrap">
+<table class="data sortable" id="networks-table">
+  <thead><tr><th data-key="prefix">Network</th><th data-key="confidence">Confidence</th><th data-key="vlan">VLAN</th><th data-key="gateway">Gateway</th><th data-key="hosts">Hosts</th><th>Evidence</th></tr></thead>
+  <tbody>
+  {% for n in networks %}
+  <tr>
+    <td>{{ n.prefix }}{% if not n.in_lan %} <span class="badge warn" title="Outside the LAN CIDRs">outside LAN</span>{% endif %}</td>
+    <td data-sort="{{ ['certain', 'strong', 'probable', 'looks local'].index(n.confidence) }}"><span class="badge {{ 'ok' if n.confidence == 'certain' else 'info' if n.confidence == 'strong' else 'warn' if n.confidence == 'looks local' else '' }}">{{ n.confidence }}</span></td>
+    <td>{{ n.vlans | join(', ') if n.vlans else '' }}</td>
+    <td>{% if n.gateway %}{{ n.gateway }}{% if n.gateway_mac %}<br><span class="muted">{{ n.gateway_mac }}</span>{% endif %}{% endif %}</td>
+    <td data-sort="{{ n.hosts }}">{{ n.hosts }}{% if n.sample %}<br><span class="muted">{{ n.sample[:4] | join(', ') }}{% if n.hosts > 4 %} …{% endif %}</span>{% endif %}</td>
+    <td>{% for e in n.evidence %}<div>{{ e }}</div>{% endfor %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No networks could be inferred from this analysis.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="table-tools"><h2>Internal devices</h2>{{ reset_sort("devices-table") }}</div>
+<p class="muted">Internal hosts that sent traffic or answered a connection. Values NetSeer could not observe are shown as <span class="unknown">unknown</span>.</p>
+<div class="table-wrap">
+<table class="data sortable" id="devices-table">
+  <thead><tr><th data-key="ip">IP</th><th data-key="mac">MAC</th><th data-key="vendor">Vendor</th><th data-key="hostname">Hostname</th><th data-key="services">Services</th><th data-key="type">Type</th><th data-key="risk">Risk</th><th data-key="seen">Seen (UTC)</th></tr></thead>
+  <tbody>
+  {% for d in devices %}
+  <tr>
+    <td>{{ d.ip }}</td>
+    <td>{{ unk(d.mac) }}</td>
+    <td>{{ unk(d.vendor) }}</td>
+    <td>{{ unk(d.hostname) }}</td>
+    <td>{{ services(d.services) }}</td>
+    <td data-sort="{{ types[d.type] }}">
+      {% if user.role == "admin" %}
+      <form method="post" action="/devices/{{ d.id }}/type">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="type" onchange="this.form.submit()" aria-label="Device type for {{ d.ip }}">
+          {% for key, label in types.items() %}<option value="{{ key }}" {{ 'selected' if d.type == key }}>{{ label }}</option>{% endfor %}
+        </select>
+      </form>
+      {% else %}{{ types[d.type] }}{% endif %}
+      {% if not d.attributed %}<span class="badge warn">not attributed</span>{% endif %}
+    </td>
+    <td data-sort="{{ '%.4f' | format(d.risk) }}"><span class="band {{ d.risk_label | lower }}" title="Combined risk from the scored incidents that involve this device">{{ '%.0f' | format(100 * d.risk) }}%</span></td>
+    <td data-sort="{{ d.first_seen or '' }}">{{ (d.first_seen or '')[:19] | replace('T', ' ') }}<br><span class="muted">to {{ (d.last_seen or '')[:19] | replace('T', ' ') }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">No internal devices were seen in this analysis.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>External sources <span class="muted" style="font-weight:normal">({{ ext_total }})</span></h2>
+<p class="muted">Every address outside your network that appeared in this analysis. Hostnames come from DNS answers, TLS server names and HTTP hosts seen in the traffic.</p>
+<form method="get" action="/devices" class="filters">
+  <div><label for="ext-q">Search</label>{{ search_input("ext-q", "ext_q", ext_q, ext_options, "IP or hostname") }}</div>
+  <div><button class="btn primary" type="submit">Filter</button> <a class="btn" href="/devices">Clear</a> {{ reset_sort("external-table") }}</div>
+</form>
+<div class="table-wrap">
+<table class="data sortable" id="external-table" data-server-sort>
+  <thead><tr><th data-key="ip">IP</th><th data-key="hostname">Hostname</th><th data-key="direction">Direction</th><th data-key="first">First seen (UTC)</th><th data-key="last">Last seen (UTC)</th><th data-key="flows">Flows</th><th data-key="bytes">Data</th><th data-key="alerts">Alerts</th><th>Ports</th><th>Talked to</th></tr></thead>
+  <tbody>
+  {% for e in externals %}
+  <tr>
+    <td>{{ e.ip }}</td>
+    <td>{{ unk(e.hostname) }}</td>
+    <td>{{ {"inbound": "Inbound (it connected in)", "outbound": "Outbound (we connected out)", "both": "Both ways"}.get(e.direction) or unk(none) }}</td>
+    <td>{{ (e.first_seen or '')[:19] | replace('T', ' ') }}</td>
+    <td>{{ (e.last_seen or '')[:19] | replace('T', ' ') }}</td>
+    <td>{{ e.n_flows }}</td>
+    <td>{{ (e.bytes / 1048576) | round(2) }} MB</td>
+    <td>{% if e.n_alerts %}<span class="badge warn">{{ e.n_alerts }}</span>{% else %}0{% endif %}</td>
+    <td>{% for p in e.ports %}<span class="badge">{{ p }}</span> {% else %}<span class="muted">—</span>{% endfor %}</td>
+    <td>{{ e.peers | join(", ") }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="10" class="muted">No external addresses{{ " match" if ext_q else " in this analysis (re-analyse older analyses to fill this table)" }}.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pager(ext_pg, ext_qs, noun="sources") }}
+{% endif %}
+{% endblock %}
+
+{% block modals %}
+{% if pending and user.role == "admin" %}
+<div class="modal-backdrop {{ 'open' if show_modal }}" id="attribution-modal" role="dialog" aria-modal="true" aria-labelledby="attr-title">
+  <div class="modal">
+    <h1 id="attr-title">Device attribution</h1>
+    <p>NetSeer found these devices in <strong>{{ selected.name }}</strong>. Choose what each one is. Servers and network devices count more in the risk score than phones or guest devices. If you are not sure, leave it as Unknown.</p>
+    <form method="post" action="/devices/attribute">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="analysis_id" value="{{ selected.id }}">
+      <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>IP</th><th>MAC / vendor</th><th>Hostname</th><th>Services</th><th>Type</th></tr></thead>
+        <tbody>
+        {% for d in pending %}
+        <tr>
+          <td>{{ d.ip }}</td>
+          <td>{{ unk(d.mac) }}<br><span class="muted">{{ d.vendor or 'vendor unknown' }}</span></td>
+          <td>{{ unk(d.hostname) }}</td>
+          <td>{{ services(d.services) }}</td>
+          <td><select name="type_{{ d.id }}" aria-label="Device type for {{ d.ip }}">
+            {% for key, label in types.items() %}<option value="{{ key }}" {{ 'selected' if d.type == key }}>{{ label }}</option>{% endfor %}
+          </select></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <p class="row-actions" style="margin-top:1rem">
+        <button class="btn primary" type="submit" name="action" value="save">Save device types</button>
+        <button class="btn" type="submit" name="action" value="skip">Skip, keep Unknown</button>
+        <button class="btn link" type="button" id="close-attribution">Decide later</button>
+      </p>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if selected %}
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script>
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const v = n => css.getPropertyValue(n).trim();
+  const box = document.getElementById("netmap"), panel = document.getElementById("map-panel");
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const mb = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} kB` : `${n} B`;
+  const types = {{ types | tojson }};
+  let cy;
+
+  const style = [
+    { selector: "node", style: { "label": "data(label)", "font-size": 9, "min-zoomed-font-size": 7, "color": v("--text"), "text-wrap": "wrap",
+        "text-valign": "bottom", "text-margin-y": 3, "width": 18, "height": 18, "background-color": v("--chart-8"),
+        "border-width": 1, "border-color": v("--surface") } },
+    { selector: "node[kind = 'internet']", style: { "shape": "round-rectangle", "width": 70, "height": 26,
+        "background-color": v("--surface-2"), "border-color": v("--muted"), "text-valign": "center", "text-margin-y": 0,
+        "font-weight": "bold" } },
+    { selector: "node[kind = 'network']", style: { "shape": "round-rectangle", "width": 96, "height": 24,
+        "background-color": v("--surface"), "border-width": 2, "border-style": "dashed", "border-color": v("--accent"),
+        "text-valign": "center", "text-margin-y": 0 } },
+    { selector: "node[kind = 'network'][!in_lan]", style: { "border-color": v("--warn") } },
+    { selector: "node[kind = 'device']", style: { "width": 22, "height": 22, "background-color": v("--band-low") } },
+    { selector: "node[band = 'medium']", style: { "background-color": v("--band-medium") } },
+    { selector: "node[band = 'high']", style: { "background-color": v("--band-high") } },
+    { selector: "node[band = 'critical']", style: { "background-color": v("--band-critical") } },
+    { selector: "node[kind = 'external']", style: { "shape": "diamond", "background-color": v("--chart-2") } },
+    { selector: "node[?gateway]", style: { "shape": "hexagon", "width": 26, "height": 26, "border-width": 3,
+        "border-color": v("--accent") } },
+    { selector: "node[alerts > 0][kind != 'device']", style: { "border-width": 2, "border-color": v("--danger") } },
+    { selector: "edge", style: { "curve-style": "bezier", "width": 1, "line-color": v("--border"), "opacity": .8 } },
+    { selector: "edge.tree", style: { "line-style": "dashed", "width": 1, "opacity": .6 } },
+    { selector: "edge.link", style: { "width": "data(width)", "line-color": v("--muted"), "opacity": .55 } },
+    { selector: "edge.alert", style: { "line-color": v("--danger"), "opacity": .7 } },
+    { selector: ":selected", style: { "overlay-color": v("--accent"), "overlay-opacity": .25, "overlay-padding": 4 } },
+  ];
+
+  // Tree: Internet on top, networks (and outside sources) in a row; a gateway sits under its network with its
+  // clients in a grid beneath it, other hosts go straight under the network.
+  function treePositions() {
+    const pos = {}, COL = 74, ROW = 48, PER_ROW = 5, GAP = 70;
+    const blocks = cy.nodes("[kind = 'network']").map(n => [n, n.outgoers("edge.tree").targets()]);
+    const outside = cy.getElementById("internet").outgoers("edge.tree").targets("[kind = 'external']");
+    if (outside.length) blocks.push([null, outside]);
+    let x = 0;
+    blocks.forEach(([head, kids]) => {
+      const gws = kids.filter(k => k.outgoers("edge.tree").length > 0);
+      const leaves = kids.difference(gws).union(gws.outgoers("edge.tree").targets());
+      const cols = Math.max(1, Math.min(PER_ROW, leaves.length)), width = cols * COL, mid = x + width / 2 - COL / 2;
+      if (head) pos[head.id()] = { x: mid, y: 110 };
+      gws.forEach((g, i) => { pos[g.id()] = { x: mid + (i - (gws.length - 1) / 2) * COL, y: 190 }; });
+      const top = !head ? 150 : gws.length ? 270 : 190;
+      leaves.forEach((k, i) => { pos[k.id()] = { x: x + (i % cols) * COL, y: top + Math.floor(i / cols) * ROW }; });
+      x += width + GAP;
+    });
+    pos.internet = { x: (x - GAP) / 2 - COL / 2, y: 20 };
+    return pos;
+  }
+
+  function run() {
+    const pos = treePositions();
+    cy.layout({ name: "preset", positions: n => pos[n.id()] || { x: 0, y: 0 }, fit: true, padding: 20 }).run();
+  }
+
+  // Traffic links stay hidden; a clicked host shows only its links that carried alerts.
+  function showAlertLinks(node) {
+    cy.edges(".link").style("display", "none");
+    if (node && node.isNode() && !["network", "internet"].includes(node.data("kind"))) {
+      node.connectedEdges(".alert").style("display", "element");
+    }
+  }
+
+  // Everything under a node in the tree (Internet → network → host).
+  function subtree(node) {
+    let kids = node.outgoers("edge.tree").targets(), all = kids;
+    while (kids.length) { kids = kids.outgoers("edge.tree").targets(); all = all.union(kids); }
+    return all;
+  }
+
+  function show(el) {
+    const d = el.data();
+    if (el.isEdge()) {
+      if (el.hasClass("tree")) return;
+      panel.innerHTML = `<h3>${esc(d.source)} ↔ ${esc(d.target)}</h3><p>${d.flows} flows · ${mb(d.bytes)} · ${d.alerts} alerts</p>
+        <p><a href="/alerts?src_ip=${encodeURIComponent(d.source)}&dest_ip=${encodeURIComponent(d.target)}">Alerts ${esc(d.source)} → ${esc(d.target)}</a><br>
+        <a href="/alerts?src_ip=${encodeURIComponent(d.target)}&dest_ip=${encodeURIComponent(d.source)}">Alerts ${esc(d.target)} → ${esc(d.source)}</a></p>`;
+      return;
+    }
+    if (d.kind === "network") {
+      panel.innerHTML = `<h3>${esc(d.label)}</h3><p><span class="badge">${esc(d.confidence || "")}</span>${d.in_lan ? "" : ' <span class="badge warn">outside LAN</span>'}</p>
+        ${d.gateway ? `<p>Gateway ${esc(d.gateway)}</p>` : ""}<ul>${(d.evidence || []).map(e => `<li>${esc(e)}</li>`).join("")}</ul>`;
+      return;
+    }
+    if (d.kind === "internet") { panel.innerHTML = "<h3>Internet</h3><p>Outside sources hang off this node.</p>"; return; }
+    const rows = [["Type", d.type ? types[d.type] : (d.kind === "external" ? "outside source" : "host (not a device)")],
+                  ["Risk", d.risk != null ? `${d.risk}%` : null], ["Hostname", d.hostname], ["MAC", d.mac], ["Vendor", d.vendor],
+                  ["Network", d.network], ["Traffic", mb(d.bytes || 0)], ["Alerts", d.alerts]];
+    const ip = d.id === "other-external" ? null : d.id;
+    panel.innerHTML = `<h3>${esc(d.label).replace("\n", "<br>")}</h3><table class="kv">${rows.filter(r => r[1] != null && r[1] !== "")
+        .map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>
+      ${ip ? `<p><a href="/alerts?src_ip=${encodeURIComponent(ip)}">Alerts from ${esc(ip)}</a><br><a href="/alerts?dest_ip=${encodeURIComponent(ip)}">Alerts to ${esc(ip)}</a></p>` : ""}`;
+  }
+
+  getJSON(`/api/analyses/{{ selected.id }}/map`).then(data => {
+    const s = data.summary;
+    document.getElementById("map-summary").textContent = `${s.networks} networks · ${s.hosts} hosts · ${s.outside} outside sources`
+      + (s.folded ? ` (${s.folded} folded)` : "") + ` · ${s.links} of ${s.links_total} links`
+      + (s.partial ? " · links from alerts only; re-analyse for all traffic" : "");
+    cy = cytoscape({ container: box, elements: [...data.nodes, ...data.edges], style,
+                     minZoom: 0.1, maxZoom: 4, userPanningEnabled: false, userZoomingEnabled: false,
+                     boxSelectionEnabled: false });
+    // Scroll to zoom around the pointer (Cytoscape's own wheel zoom stops working once user panning is off).
+    box.addEventListener("wheel", e => {
+      e.preventDefault();
+      const r = box.getBoundingClientRect();
+      const level = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), cy.zoom() * Math.pow(0.999, e.deltaY)));
+      cy.zoom({ level, renderedPosition: { x: e.clientX - r.left, y: e.clientY - r.top } });
+    }, { passive: false });
+    // Hold the right button to pan; the left button selects (tap) and drags nodes.
+    let pan = null;
+    box.addEventListener("contextmenu", e => e.preventDefault());
+    box.addEventListener("mousedown", e => { if (e.button === 2) pan = { x: e.clientX, y: e.clientY }; });
+    window.addEventListener("mousemove", e => {
+      if (!pan) return;
+      cy.panBy({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      pan = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener("mouseup", e => { if (e.button === 2) pan = null; });
+    cy.on("tap", "node, edge", e => { show(e.target); if (e.target.isNode()) showAlertLinks(e.target); });
+    cy.on("tap", e => { if (e.target === cy) showAlertLinks(null); });
+    // Children follow a dragged parent.
+    let drag = null;
+    cy.on("grab", "node", e => { drag = { pos: { ...e.target.position() }, kids: subtree(e.target) }; });
+    cy.on("drag", "node", e => {
+      if (!drag) return;
+      const p = e.target.position(), dx = p.x - drag.pos.x, dy = p.y - drag.pos.y;
+      drag.kids.not(":grabbed").positions(n => ({ x: n.position("x") + dx, y: n.position("y") + dy }));
+      drag.pos = { ...p };
+    });
+    cy.on("free", "node", () => { drag = null; });
+    run();
+    showAlertLinks(null);
+  }).catch(e => { box.textContent = `Could not load the map: ${e.message}`; });
+
+  document.getElementById("map-fit").addEventListener("click", () => cy && cy.fit(undefined, 20));
+  document.getElementById("map-reset").addEventListener("click", () => cy && run());
+})();
+</script>
+{% endif %}
+<script>
+(function () {
+  const modal = document.getElementById("attribution-modal");
+  if (!modal) return;
+  const open = document.getElementById("open-attribution");
+  if (open) open.addEventListener("click", () => modal.classList.add("open"));
+  document.getElementById("close-attribution").addEventListener("click", () => modal.classList.remove("open"));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
+})();
+</script>
+{% endblock %}

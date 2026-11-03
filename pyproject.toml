@@ -1,0 +1,9 @@
+[project]
+name = "netseer"
+version = "0.1.0"
+description = "AI-assisted alert interpretation layer for small flat networks (FYP2, UniKL)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["netseer/tests"]
+markers = ["integration: runs real Suricata/mergecap (needs read access to the Suricata rules)"]

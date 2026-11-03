@@ -1,0 +1,102 @@
+[
+  {
+    "id": "PB-SCAN",
+    "category": "scan",
+    "title": "Someone is scanning or probing your network",
+    "tags": ["attempted-recon", "network-scan", "successful-recon-limited", "scan", "nmap", "probe", "portscan", "reconnaissance", "discovery", "TA0043", "TA0007"],
+    "steps": [
+      "Detect: note which device did the scanning and which devices and ports it looked at.",
+      "Analyse: if the scanner is one of your own devices, ask its owner whether a scan was planned (an IT check or a network tool). An unplanned scan from inside may mean that device is infected.",
+      "Respond: if the scanner is outside your network, make sure your router or firewall does not forward ports you do not need.",
+      "Respond: close or block any service that answered the scan and is not needed.",
+      "Recover: keep watching that device; a scan is often the first step before an attack."
+    ]
+  },
+  {
+    "id": "PB-BRUTE",
+    "category": "brute force",
+    "title": "Repeated login attempts (password guessing)",
+    "tags": ["attempted-admin", "attempted-user", "default-login-attempt", "credential-theft", "brute", "bruteforce", "login", "ssh", "rdp", "ftp", "telnet", "password", "T1110", "TA0006"],
+    "steps": [
+      "Detect: note the service (for example SSH, RDP or FTP), the target device and where the attempts came from.",
+      "Analyse: check that device's login log for a successful login from the same address. Without one, there is no sign the guessing worked.",
+      "Respond: block the source address, and limit the service to the devices that really need it.",
+      "Respond: change weak or default passwords and turn on multi-factor login where possible.",
+      "Recover: if a login did succeed, treat the account as stolen: reset its password and look for changes made with it."
+    ]
+  },
+  {
+    "id": "PB-C2",
+    "category": "malware/C2",
+    "title": "A device may be infected and talking to a control server",
+    "tags": ["trojan-activity", "command-and-control", "domain-c2", "malware", "c2", "beacon", "botnet", "trojan", "TA0011", "T1071"],
+    "steps": [
+      "Detect: note the device, the outside address or domain and how often it connected.",
+      "Analyse: check the outside address with a reputation service. Repeated, regular connections are a stronger sign than a single one.",
+      "Respond: disconnect the device from the network (unplug it or turn off Wi-Fi) but leave it powered on.",
+      "Respond: run an up-to-date antivirus scan; if malware is found or you are unsure, ask an IT professional or reinstall the system.",
+      "Recover: change passwords that were used on that device, from a different, clean device."
+    ]
+  },
+  {
+    "id": "PB-EXPLOIT",
+    "category": "exploit attempt",
+    "title": "An attack attempt against a service or web application",
+    "tags": ["web-application-attack", "attempted-admin", "attempted-user", "successful-user", "successful-admin", "exploit", "cve", "injection", "sql", "xss", "overflow", "rce", "TA0001", "TA0002", "T1190"],
+    "steps": [
+      "Detect: note the targeted device, the service or web address and the rule name or CVE.",
+      "Analyse: an attempt is not a success. Check whether the targeted software and version are affected, and look at the device's own logs around that time.",
+      "Respond: update the targeted software to a fixed version, or switch the service off if it is not needed.",
+      "Respond: if the service only needs to be reached from inside, block it from the Internet.",
+      "Recover: if there are signs it worked (new accounts, unknown programs, odd outbound traffic), isolate the device and get expert help."
+    ]
+  },
+  {
+    "id": "PB-POLICY",
+    "category": "policy",
+    "title": "Traffic that breaks a usual security policy",
+    "tags": ["policy-violation", "protocol-command-decode", "misc-activity", "policy", "cleartext", "p2p", "torrent", "tor", "vpn", "remote"],
+    "steps": [
+      "Detect: note which device and which application or protocol was involved.",
+      "Analyse: ask whether this use is expected. Plain-text logins, file sharing or remote-access tools are often legitimate but risky.",
+      "Respond: if it is not wanted, remove the application or block it at the router.",
+      "Recover: if passwords were sent in plain text, change them and move to an encrypted alternative."
+    ]
+  },
+  {
+    "id": "PB-DOS",
+    "category": "DoS",
+    "title": "An attempt to overload a device or service (denial of service)",
+    "tags": ["attempted-dos", "successful-dos", "dos", "ddos", "flood", "syn", "amplification", "T1498", "T1499", "TA0040"],
+    "steps": [
+      "Detect: note the target device or service and the volume and source of the traffic.",
+      "Analyse: check whether the service actually slowed down or stopped.",
+      "Respond: block the sources at the router; for large floods from the Internet, ask your Internet provider for help.",
+      "Recover: restart the affected service if needed and confirm it works again."
+    ]
+  },
+  {
+    "id": "PB-SUSPICIOUS",
+    "category": "suspicious",
+    "title": "Suspicious traffic that is not clearly an attack",
+    "tags": ["bad-unknown", "unknown", "not-suspicious", "suspicious", "anomaly", "dns", "tls", "certificate", "info"],
+    "steps": [
+      "Detect: note the devices involved and what made the traffic stand out.",
+      "Analyse: many of these alerts are harmless. Look for repeats over time or other alerts on the same device before acting.",
+      "Respond: if the device or outside address also appears in more serious incidents, follow that incident's guidance.",
+      "Recover: if it keeps happening and is harmless, note it so it is easier to recognise next time."
+    ]
+  },
+  {
+    "id": "PB-EXFIL",
+    "category": "data theft",
+    "title": "Data may be leaving the network",
+    "tags": ["successful-recon-largescale", "exfiltration", "upload", "leak", "TA0010", "T1041", "T1048"],
+    "steps": [
+      "Detect: note the device, the outside address and how much data was sent.",
+      "Analyse: check whether a backup, cloud sync or software update explains the transfer.",
+      "Respond: if not, disconnect the device and block the outside address.",
+      "Recover: find out what data was on the device and follow your legal or contractual duties if personal data may have leaked."
+    ]
+  }
+]

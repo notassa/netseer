@@ -1,0 +1,21 @@
+# NetSeer real-time capture (CONCEPTS A9, A13; brief §6c): Suricata in af-packet mode on the mirror NIC %i.
+# Runs as netseer with only the capture capabilities; the app starts/stops it through a narrow sudoers rule.
+# The app writes the per-session settings (output dir, HOME_NET, EXTERNAL_NET) to the EnvironmentFile first.
+[Unit]
+Description=NetSeer live capture on %i
+After=network.target
+
+[Service]
+Type=simple
+User=netseer
+Group=netseer
+SupplementaryGroups=suricata
+EnvironmentFile=/home/netseer/FYP2_netseer/netseer/src/database/eves/live-%i.env
+ExecStart=/usr/bin/suricata -c /home/netseer/FYP2_netseer/netseer/config/suricata/netseer.yaml --af-packet=%i \
+    -l ${OUT_DIR} -k none --set unix-command.enabled=no \
+    --set vars.address-groups.HOME_NET=${HOME_NET} --set vars.address-groups.EXTERNAL_NET=${EXTERNAL_NET}
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=yes
+Restart=on-failure
+RestartSec=5
