@@ -19,7 +19,7 @@ from netseer.src.engine.constants import (BANDS, DAMPING_P, DEVICE_TYPE, DEVICE_
                                           I3_CLASSTYPE, I3_OTHER, L1_PRIORITY, L1_SIG_SEVERITY, L3_RULE, L4_DIRECTION,
                                           LEVEL_CUTS, MATRIX, RISK_CUTS)
 
-MODEL_VERSION = "A5-1.0"        # CONCEPTS A5 risk model; bump when A5 rules change
+MODEL_VERSION = "A5-1.1"        # CONCEPTS A5 risk model; bump when A5 rules change
 
 I3_BY_CLASSTYPE = {ct: value for value, names in I3_CLASSTYPE.items() for ct in names}
 RULE_WHY = {
@@ -107,7 +107,7 @@ def damped_union(xs: Iterable[float]) -> float:
 
 
 def health(xs: Iterable[float]) -> tuple[float, int]:
-    """(P(N), health) from the incidents' weighted probabilities xᵢ: P(N) = D(xᵢ); health = round(100·(1 − P(N)))."""
+    """(P(N), health) from the incidents' probabilities xᵢ = pᵢ: P(N) = D(xᵢ); health = round(100·(1 − P(N)))."""
     p_n = damped_union(xs)
     return p_n, round(100 * (1 - p_n))
 
@@ -236,12 +236,6 @@ def _scored_incidents(conn: sqlite3.Connection, analysis_id: int) -> list[tuple[
                                     "AND band != 'Note'", (analysis_id,))]
 
 
-def _asset_weight(inc: sqlite3.Row) -> float:
-    """wᵢ = I1/9 of the incident (Unknown when it was not scored)."""
-    factors = json.loads(inc["factors_json"] or "{}")
-    return (factors.get("I1", {}).get("value") or DEVICE_TYPE["unknown"]) / 9
-
-
 def roll_up(conn: sqlite3.Connection, analysis_id: int) -> None:
     """Store each device's risk P(d) (0–1): the rank-damped union of pᵢ over the non-Note incidents involving it."""
     devices = _devices(conn, analysis_id)
@@ -274,8 +268,7 @@ def network_health(conn: sqlite3.Connection, analysis_id: int) -> dict:
     in proportion to −ln(1 − x_(k)/k^1.5), the log-additive split of the product, so the points add up to the drop.
     `top_devices` are the 3 devices with the largest w_d·P(d).
     """
-    scored = sorted(((inc, _asset_weight(inc) * p) for inc, p in _scored_incidents(conn, analysis_id)),
-                    key=lambda t: -t[1])
+    scored = sorted(_scored_incidents(conn, analysis_id), key=lambda t: -t[1])   # I1 is already in each R (A5.4)
     xs = [x for _, x in scored]
     p_n, value = health(xs)
     logs = [-math.log(1 - x / k ** DAMPING_P) if x / k ** DAMPING_P < 1 else math.inf for k, x in enumerate(xs, 1)]

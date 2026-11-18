@@ -8,6 +8,7 @@ import re
 import pytest
 
 from netseer.src.database import db
+from netseer.src.engine import scorer
 from netseer.src.engine.acp import needs_acp
 from netseer.tests.test_auth import USER_PW, admin_client, csrf, login  # noqa: F401 - fixture
 from netseer.tests.test_contextor import add_alert
@@ -49,7 +50,7 @@ def test_home_shows_health_and_top_incidents(scored):
     page = client.get("/")
     assert page.status_code == 200
     assert "Top incidents" in page.text and "Devices at risk" in page.text
-    assert 0 < health(client) <= 62      # A5.6 gives 62; the extra probe of the server can only lower it
+    assert 0 < health(client) <= 47      # A5.6 gives 47; the extra probe of the server can only lower it
 
 
 def test_incident_detail_and_missing_incident(scored):
@@ -66,14 +67,15 @@ def test_incident_detail_and_missing_incident(scored):
 
 def test_changing_a_device_type_rescores_and_updates_home(scored):
     client, conn = scored
-    before = health(client)
+    health(client)                       # first view runs ACP
+    before = scorer.network_health(conn, 1)["p_network"]
     server = conn.execute("SELECT id FROM devices WHERE ip = ?", (SERVER,)).fetchone()["id"]
     score_before = conn.execute("SELECT score FROM incidents WHERE rule = 'R2'").fetchone()["score"]
     r = client.post(f"/devices/{server}/type", data={"csrf_token": csrf(client, "/devices"), "type": "guest"})
     assert r.status_code == 303
     after = conn.execute("SELECT score, factors_json FROM incidents WHERE rule = 'R2'").fetchone()
     assert json.loads(after["factors_json"])["I1"]["value"] == 3 and after["score"] < score_before
-    assert health(client) > before       # a guest device weighs less than a server
+    assert scorer.network_health(conn, 1)["p_network"] < before   # lower I1 → lower R → less network risk
 
 
 def test_changing_the_correlation_window_rebuilds_incidents_and_updates_home(scored):

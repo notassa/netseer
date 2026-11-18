@@ -67,7 +67,7 @@ For anything that needs root (apt installs, `suricata-update`, files under `/etc
 ## Code conventions
 - Package root `netseer/`: `src/api`, `src/engine`, `src/database` (+ `pcaps/`, `eves/`), `ai`, `web/templates`, `web/static`, `config`, `tests`, `eval`, `cli.py`.
 - SQLite via the stdlib `sqlite3` (WAL mode). FastAPI + Jinja2 + vanilla JS + Chart.js (vendored, offline). No frontend build step.
-- Tests: `pytest netseer/tests`. The scorer must reproduce the CONCEPTS A5.6 worked example exactly (health = 62).
+- Tests: `pytest netseer/tests`. The scorer must reproduce the CONCEPTS A5.6 worked example exactly (health = 47).
 
 ## Hand-back for the report (written on the Windows machine)
 - Screenshots go to `docs/screenshots/` with the names in brief §12 (`01-login.png` … `13-network-live.png`).

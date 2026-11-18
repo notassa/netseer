@@ -201,8 +201,10 @@ with its value, evidence and a one-line reason, so "why is this High?" is always
   D rises far less than the plain union, which nearly doubles it. On UNSW-NB15 (measured before the October rule
   fixes) the plain union gave health 7/2/0 at windows of 60/30/5 min; the damped one gave 56/55/55.
 - **Device risk** P(d) = D over its incidents, shown as a %. Its **colour is the worst band** among its incidents.
-- **Network health** = 100 · (1 − P(N)), where P(N) = D over all non-Note incidents of xᵢ = (I1/9)·pᵢ, the
-  probability weighted by asset value. Home lists the incidents that cost the most points.
+- **Network health** = 100 · (1 − P(N)), where P(N) = D over all non-Note incidents of xᵢ = pᵢ. Asset value
+  is counted once, inside each incident's impact. Health is a triage index, not a probability of compromise; Home
+  lists the incidents that cost the most points. The k^1.5 damping is a NetSeer heuristic, backed by the
+  split-stability measurement above, not by a published source.
 
 ### 4.5 Worked example (A5.6, a unit test)
 LAN 10.0.0.0/24; server 10.0.0.5 (Server, I1 9), workstation 10.0.0.23 (Workstation, I1 6).
@@ -214,10 +216,10 @@ LAN 10.0.0.0/24; server 10.0.0.5 (Server, I1 9), workstation 10.0.0.23 (Workstat
 | I | 3 × 1.0 = **3.0** Medium | 9 × 0.833 = **7.5** High |
 | Band, R | **Medium**, 2.16 | **High**, 4.94 |
 
-Roll-up (age 0, so no decay): x(b) = 0.667 × 0.494 = 0.329; x(a) = 0.216, damped by 2^1.5 →
-P(N) = 1 − 0.671 × 0.924 = 0.381 → **health 62**.
+Roll-up (age 0, so no decay): x(b) = 0.494; x(a) = 0.216, damped by 2^1.5 →
+P(N) = 1 − 0.506 × 0.924 = 0.533 → **health 47**.
 
-> **Report action:** report Table 4.7 still shows health = 53, the value from before rank damping. Update it to 62.
+> **Report action:** report Table 4.7 still shows health = 53, the value from before rank damping. Update it to 47 (I1 counted once since 2026-11-18).
 
 ---
 
@@ -298,7 +300,7 @@ Updated after every change that moves a number. How each step was checked: `docs
 | Capture size | 7,629 MB ("big": UNSW-NB15 14/16/17/18.pcap, 13.7 M packets); earlier 568 MB (`27.pcap`) |
 | Raw alerts | 1,349 ("big", with its LAN adoption and "Detect attacks from inside the LAN" off; 1,630 before adoption); 233 (`27.pcap`) |
 | Alert groups | 1,004 ("big": 25.6% fewer than alerts) |
-| Possible incidents | 209 (Critical 6, High 19, Medium 84, Low 93, Note 7); network health 41; largest incident 17% of alerts ("big", rules of change request 4) |
+| Possible incidents | 209 (Critical 6, High 19, Medium 84, Low 93, Note 7); network health 41 (I1-weighted roll-up before 2026-11-18; analysis no longer in the DB, re-measure); largest incident 17% of alerts ("big", rules of change request 4) |
 | Reduction % | 84.5% (alerts → possible incidents, "big"; 96.7% before the stricter R2/R3/R4, which had merged unrelated alerts) |
 | Processing time | ACP 3–6: 0.15 s for 1,349 alerts; whole analysis 137 s for 7,629 MB (55.8 MB/s) ("big") |
 | LLM seconds per explanation | 91 s mean (46–117 s, 5 incidents, `llama3.2:3b`, CPU, 4 threads, ~2,300-token prompt) |

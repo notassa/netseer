@@ -54,8 +54,8 @@ BANDS = ("Critical", "High", "Medium", "Low", "Note")      # sort order, worst f
 
 # A5.4 roll-up (rank-damped union).  p_i = R_i/10 * 0.5**(age/half_life), Note excluded
 # D(x sorted desc) = 1 - prod_k(1 - x_k / k**DAMPING_P);  P(d) = D(p_i of incidents with d)
-# P(N) = D((I1_i/9) * p_i over all non-Note incidents);  health = round(100*(1-P(N)))
-DAMPING_P = 1.5                  # Riemann-zeta rank damping (as in Elastic entity risk scoring)
+# P(N) = D(p_i over all non-Note incidents; I1 already in R, so no weight);  health = round(100*(1-P(N)))
+DAMPING_P = 1.5                  # NetSeer heuristic, checked by split stability (CONCEPTS A5.4)
 RISK_CUTS = ((90, "Critical"), (70, "High"), (40, "Medium"), (0, "Low"))   # device risk %, same as R x10
 
 # A4 correlation thresholds.

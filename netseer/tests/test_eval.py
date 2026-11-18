@@ -20,9 +20,9 @@ def test_metrics_and_saturation(conn):  # noqa: F811
     worked_example(conn)
     run_acp(conn, 1)
     m = metrics(conn, 1)
-    assert (m["alerts"], m["groups"], m["incidents"], m["health"]) == (72, 6, 2, 62)
+    assert (m["alerts"], m["groups"], m["incidents"], m["health"]) == (72, 6, 2, 47)
     assert m["bands"]["High"] == 1 and m["bands"]["Medium"] == 1
-    assert saturation(conn, 1) == [(1, 67), (2, 62)]
+    assert saturation(conn, 1) == [(1, 51), (2, 47)]
 
 
 def test_unsw_matching(conn):  # noqa: F811

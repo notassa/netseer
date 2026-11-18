@@ -24,8 +24,8 @@ def test_worked_example_pure():
     assert (round(Lb, 2), round(Ib, 2), scorer.band(Lb, Ib), round(scorer.score(Lb, Ib), 2)) == (5.34, 7.5, "High", 4.94)
     p_server, p_ws = scorer.damped_union([scorer.score(La, Ia) / 10]), scorer.damped_union([scorer.score(Lb, Ib) / 10])
     assert (round(p_server, 3), round(p_ws, 3)) == (0.216, 0.494)
-    p_n, health = scorer.health([9 / 9 * p_server, 6 / 9 * p_ws])
-    assert (round(p_n, 3), health) == (0.381, 62)
+    p_n, health = scorer.health([p_server, p_ws])
+    assert (round(p_n, 3), health) == (0.533, 47)
 
 
 @pytest.mark.parametrize("x, expected", [(0, "Low"), (2.999, "Low"), (3.0, "Medium"), (5.999, "Medium"),
@@ -102,10 +102,10 @@ def test_worked_example_end_to_end(conn):  # noqa: F811
     risk = dict(conn.execute("SELECT ip, risk FROM devices").fetchall())
     assert (round(risk[SERVER], 3), round(risk[WORKSTATION], 3)) == (0.216, 0.494)
     net = scorer.network_health(conn, 1)
-    assert (round(net["p_network"], 3), net["health"]) == (0.381, 62)
+    assert (round(net["p_network"], 3), net["health"]) == (0.533, 47)
     assert [d["ip"] for d in net["top_devices"]] == [WORKSTATION, SERVER]
     assert [i["id"] for i in net["top_incidents"]] == [b["id"], a["id"]]
-    assert [i["points"] for i in net["top_incidents"]] == [32, 6]       # shares of the 38-point drop
+    assert [i["points"] for i in net["top_incidents"]] == [47, 6]       # shares of the 53-point drop
 
 
 def test_factor_meta_model_version_data_quality_and_health(conn):  # noqa: F811
@@ -115,12 +115,12 @@ def test_factor_meta_model_version_data_quality_and_health(conn):  # noqa: F811
     rows = conn.execute("SELECT * FROM incidents").fetchall()
     for r in rows:
         meta = json.loads(r["factors_json"])["_meta"]
-        assert meta["model_version"] == "A5-1.0"
+        assert meta["model_version"] == "A5-1.1"
         assert set(meta["data_quality"]) == {"unattributed_devices", "no_internal_device", "ti_checked"}
     b = conn.execute("SELECT * FROM incidents WHERE rule = 'single'").fetchone()
     assert WORKSTATION in json.loads(b["factors_json"])["_meta"]["data_quality"]["unattributed_devices"]
     net = scorer.network_health(conn, 1)
-    assert (round(net["p_network"], 3), net["health"]) == (0.381, 62)
+    assert (round(net["p_network"], 3), net["health"]) == (0.533, 47)
 
 
 def test_incidents_without_devices_still_lower_health(conn):  # noqa: F811
@@ -130,7 +130,7 @@ def test_incidents_without_devices_still_lower_health(conn):  # noqa: F811
     run_acp(conn, 1)
     inc = conn.execute("SELECT * FROM incidents").fetchone()
     assert json.loads(inc["factors_json"])["I1"]["value"] == 5
-    assert scorer.network_health(conn, 1)["health"] == round(100 * (1 - 5 / 9 * inc["score"] / 10))
+    assert scorer.network_health(conn, 1)["health"] == round(100 * (1 - inc["score"] / 10))   # no I1 weight (A5.4)
 
 
 def test_note_band_excluded_from_roll_up(conn):  # noqa: F811
