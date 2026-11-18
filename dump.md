@@ -9,7 +9,7 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
-- [2026-11-18] Implement docs/risk_scoring_redesign.md → partly adopted: I1 once (unweighted roll-up), k^1.5 = NetSeer heuristic, health = triage index; weighted mean, EMA, lookback window not adopted; ATT&CK breadth deferred → CONCEPTS A5.4/A5.6 → COMMIT
+- [2026-11-18] Implement docs/risk_scoring_redesign.md → partly adopted: I1 once (unweighted roll-up), k^1.5 = NetSeer heuristic, health = triage index; weighted mean, EMA, lookback window not adopted; ATT&CK breadth deferred → CONCEPTS A5.4/A5.6 → 8049477
 - [2026-11-18] Review docs/netseer-risk-scoring-implementation-spec.md vs current model → not adopted as a whole (would undo A5 decisions; weaker evidence); adopted its audit fields, stable order, evaluation → CONCEPTS A5.3/A5.4
 - [2026-11-18] Don't burn tokens; smarter route when stuck in a loop → new; done → CLAUDE.md "Token economy and loop guard", AGENTS.md "Save tokens"
 - [2026-11-18] maclookup.app API when the local OUI lookup returns unknown → new; done, setting on by default, OUI only, cached → CONCEPTS A3/A9/A15
