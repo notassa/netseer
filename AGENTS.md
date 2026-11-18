@@ -10,6 +10,12 @@ You are a worker. Claude Code is the orchestrator: it gives you one scoped codin
 - Never cut: validation at trust boundaries, error handling that prevents data loss, security, accessibility.
 - Replies short and plain: no filler.
 
+## Save tokens
+- Read only the files the brief names, with grep or line ranges; no repo-wide exploration.
+- Run only the test command the brief gives.
+- Same error twice → stop and report it; no blind retries.
+- Keep the final report short.
+
 ## Do
 - Edit **only** the files named in the brief. If another file must change, stop and say which and why.
 - Use only functions, modules and settings that exist in this repo or in the installed packages (`.venv`). Check before you use them.

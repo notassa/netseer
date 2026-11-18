@@ -8,6 +8,7 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-18] Don't burn tokens; smarter route when stuck in a loop → new; done → CLAUDE.md "Token economy and loop guard", AGENTS.md "Save tokens"
 - [2026-11-18] maclookup.app API when the local OUI lookup returns unknown → new; done, setting on by default, OUI only, cached → CONCEPTS A3/A9/A15
 - [2026-11-18] progress.md = change log only → conflicted with CLAUDE.md/KICKOFF/WRITEUP pointers; done: environment → brief §3a, Tables 4.12/4.13 + demo commands → WRITEUP §8/§10, build record + decisions → RAD-PLAN; pointers updated
 - [2026-11-18] Alerts table: Time (UTC), Severity, Signature, Class, Direction, Source, Destination, Proto; Priority → Severity [1] High…[4] Info → new; done (also incident raw alerts, filters, pie) → CONCEPTS A5.5/A10, brief §9

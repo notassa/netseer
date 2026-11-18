@@ -5,6 +5,7 @@ Last updated: 2026-11-18
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-18] Add token-economy and loop-guard rules (`CLAUDE.md`, `AGENTS.md`)
 - [2026-11-18] Online MAC vendor fallback (maclookup.app, OUI only, cached, setting on by default); progress.md is now the change log only (environment → brief §3a, Tables 4.12/4.13 + demo commands → WRITEUP §8/§10, build record + decisions → RAD-PLAN). 208 tests
 - [2026-11-18] dump.md ideas 1–3: Alerts table shows 8 columns with Severity = Suricata priority as [1] High…[4] Info (also on the incident raw-alerts table; ET severity column and filter removed); network map leaves out broadcast, multicast and unspecified addresses that are not devices; Home shows the Analysis card first. 203 tests
 - [2026-11-18] Add caveman + ponytail style rules (`CLAUDE.md`, ponytail rules for workers in `AGENTS.md`)

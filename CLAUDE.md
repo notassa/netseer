@@ -25,6 +25,13 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
   Use `deepseek/deepseek-flash` for trivial, mechanical edits. Independent tasks may run in parallel only if they touch different files.
 - **A brief contains:** goal; exact files to edit (and files to read); the interfaces/functions to use, with paths; constants and numbers copied from the docs (never "as in the docs"); the test to add and the command that must pass; what is out of scope.
 
+## Token economy and loop guard
+- Read with grep or line ranges, not whole files; never re-read what is already in context.
+- Briefs give exact paths, line ranges and helper names so workers don't explore. `deepseek-flash` for mechanical edits, `deepseek-v4-pro` only for logic.
+- While iterating, run only the relevant test files; run the full suite once, before the commit.
+- Wait on exit notifications instead of polling; kill a worker that reported but still hangs.
+- **Loop guard:** same failure twice → stop and change approach (new hypothesis, smaller step, or do it yourself); third failure → ask the owner.
+
 ## Zero hallucination
 - No claim without evidence: a `file:line`, command output or test result. If it is not verified, say "unknown" or ask the owner.
 - Never report a number (timings, counts, test totals) that was not measured in this session.
