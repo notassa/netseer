@@ -28,6 +28,41 @@ pip install fastapi "uvicorn[standard]" jinja2 python-multipart argon2-cffi http
 - Download Chart.js 4 once to `netseer/web/static/vendor/chart.umd.min.js` (works offline).
 - `mergecap` comes with `wireshark-common`. Answer "No" to the non-root capture prompt.
 
+### 3a. As built (step 0 audit, 2026-10-21)
+| Item | Value |
+|---|---|
+| OS | Ubuntu 24.04.5 LTS, kernel 6.8.0-147-generic, timezone UTC |
+| CPU | Intel Core i5-**9600T** (6 cores, AVX2/FMA). The docs say i5-9500T; the box has the 9600T |
+| RAM | 15 GiB + 4 GiB swap |
+| Disk | `/` 98 GB LVM volume, 85 GB free (the SSD has unallocated space left in the VG) |
+| Suricata | 8.0.7 (OISF PPA), config `netseer/config/suricata/netseer.yaml` |
+| Rules | `/var/lib/suricata/rules/suricata.rules`: 109,262 alert rules (ET Open + abuse.ch SSLBL blacklist, SSLBL C2, Feodo Tracker, URLhaus). ThreatFox has no suricata-update source |
+| Tools | mergecap/editcap 4.2.2, jq, ethtool, tcpdump, ieee-data OUI (`/usr/share/ieee-data/oui.csv`) |
+| Python | 3.12.3, venv `.venv`: fastapi 0.156.4, uvicorn 0.54.0, jinja2 3.1.6, python-multipart 0.0.32, argon2-cffi 25.1.0, httpx 0.28.1, pydantic 2.14.1, cryptography 50.0.2, mitreattack-python 6.3.1, pytest 9.1.1 |
+| Chart.js | 4.4.9, vendored at `netseer/web/static/vendor/chart.umd.min.js` |
+| Ollama | service active, `llama3.2:3b` pulled (2.0 GB), 100% CPU |
+| Permissions | `netseer` is in group `suricata` (needed to read rules and `/etc/suricata`) |
+
+#### NICs
+
+| NIC | Driver | Role | State at audit |
+|---|---|---|---|
+| `eno1` | e1000e (Intel I219-V, onboard) | **LAN** — dashboard, 192.168.100.24/24, gw 192.168.100.1 | up |
+| `enxec1ac300527e` | r8152 (UGREEN USB 3.0 adapter) | **Mirror port** (C4) — no IP, promiscuous | no carrier (not yet connected to the switch SPAN port) |
+
+#### Ollama speed (`llama3.2:3b`, short prompt, warm model)
+
+| Run | Prompt eval | Generation |
+|---|---|---|
+| 6 threads, one core busy with a crash-looping `suricata.service` | 85 tok/s | **1.8 tok/s** (thread contention) |
+| 5 threads | 48 tok/s | **8.1 tok/s** |
+| 4 threads | 42 tok/s | **8.8 tok/s** |
+
+Estimate for one explanation (~2,500 prompt tokens, ~400 output tokens): about 50 s prompt + 50 s output ≈ 1.5–2 min. Re-measure with all 6 threads once the system `suricata.service` is disabled.
+
+#### Open environment items
+- The packaged `suricata.service` is enabled and crash-loops on the non-existent `eth0` (325+ restarts), burning one core. NetSeer doesn't use it: `sudo systemctl disable --now suricata`.
+
 ## 4. Code layout (existing skeleton; *new* = add)
 ```
 netseer/

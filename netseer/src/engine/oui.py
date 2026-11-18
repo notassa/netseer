@@ -8,8 +8,10 @@ Suricata reports no MACs; `sll_macs` reads the sender MAC that SLL keeps per pac
 from __future__ import annotations
 
 import csv
+import json
 import os
 import re
+import sqlite3
 import struct
 import subprocess
 from collections import Counter, defaultdict
@@ -19,11 +21,15 @@ from pathlib import Path
 
 import httpx
 
-from netseer.src.config import DATABASE_DIR, app_config
+from netseer.src.config import DATABASE_DIR, app_config, get_setting
+from netseer.src.database import db
 
 PRIVATE_MAC = "Private (randomised) MAC"
 MANUF_PATH = DATABASE_DIR / "manuf"
 MANUF_URL = "https://www.wireshark.org/download/automated/data/manuf"
+MACLOOKUP_URL = "https://api.maclookup.app/v2/macs/{}"   # A3: online vendor fallback (OUI only)
+MACLOOKUP_MAX = 100                     # at most this many HTTP lookups per run
+MACLOOKUP_TIMEOUT_S = 5
 MANUF_MIN_ROWS = 10_000                 # a real list has ~50k; fewer means a broken download
 SLL_LINKTYPES = {113, 276}              # Linux cooked v1, v2
 SLL_MAX_PACKETS = 2_000_000
@@ -77,6 +83,53 @@ def vendor_for(mac: str | None, oui_csv: str | Path) -> str | None:
         if (name := manuf.get(bits, {}).get(hexdigits[: bits // 4])):
             return name
     return _load(str(oui_csv)).get(hexdigits[:6])
+
+
+def online_vendors(conn: sqlite3.Connection, analysis_id: int, get=httpx.get) -> int:
+    """Fill `devices.vendor` for devices the local lists could not name, asking maclookup.app per OUI.
+
+    Only the first six hex digits (the OUI) are sent, at most MACLOOKUP_MAX per run and once per OUI; answers
+    (including "not found") are cached in `ti_cache` until Detonate. Returns the number of devices updated.
+    """
+    if not get_setting(conn, "mac_lookup_online"):
+        return 0
+    updated = 0
+    asked: set[str] = set()
+    for row in conn.execute(
+            "SELECT id, mac FROM devices WHERE analysis_id = ? AND vendor IS NULL AND mac IS NOT NULL AND mac != ''",
+            (analysis_id,)).fetchall():              # read all first: the loop writes to the same DB
+        mac = row["mac"]
+        hexdigits = mac.replace(":", "").replace("-", "").upper()
+        if len(hexdigits) != 12 or not is_unicast(mac):
+            continue
+        if int(hexdigits[:2], 16) & 0x02:       # locally administered bit: randomised MACs are never sent
+            continue
+        oui = hexdigits[:6]
+        indicator = f"maclookup:{oui}"
+        cached = conn.execute("SELECT result_json FROM ti_cache WHERE indicator = ?", (indicator,)).fetchone()
+        if cached:
+            result = json.loads(cached["result_json"])
+            found, company = result["found"], result["company"]
+        else:
+            if len(asked) >= MACLOOKUP_MAX:
+                break
+            asked.add(oui)
+            try:
+                r = get(MACLOOKUP_URL.format(oui), headers={"Accept": "application/json"}, timeout=MACLOOKUP_TIMEOUT_S)
+                if r.status_code != 200:
+                    break
+                data = r.json()
+                if not data["success"]:
+                    break
+                found, company = bool(data["found"]), str(data["company"])
+            except (httpx.HTTPError, ValueError, KeyError):
+                break
+            conn.execute("INSERT OR REPLACE INTO ti_cache(indicator, source, result_json, fetched_at) VALUES (?, ?, ?, ?)",
+                         (indicator, "maclookup", json.dumps({"found": found, "company": company}), db.utcnow()))
+        if found and company:
+            conn.execute("UPDATE devices SET vendor = ? WHERE id = ?", (company, row["id"]))
+            updated += 1
+    return updated
 
 
 def manuf_info() -> dict:

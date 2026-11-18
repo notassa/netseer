@@ -95,6 +95,10 @@
     <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).
       Turn it off for testbed captures such as UNSW-NB15, where it floods the analysis with LAN policy alerts.
       Applies to the next analysis or Re-analyse.</div>
+    <label style="font-weight:normal;margin-top:.6rem"><input type="checkbox" name="mac_lookup_online" {{ 'checked' if config.mac_lookup_online }}>
+      Look up unknown MAC vendors online</label>
+    <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
+      (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
     <p><button class="btn primary" type="submit">Save configuration</button></p>
   </form>
   <p class="muted" style="margin-bottom:0">Still to come: data retention (cutover). Rules update is under Rules &amp; knowledge base.</p>

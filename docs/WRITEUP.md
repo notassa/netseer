@@ -280,22 +280,30 @@ deterministic.
 
 ## 8. Results (report Tables 4.12 and 4.13)
 
-**Cycles (Table 4.12):** C1 foundation and offline: Completed · C2 ACP and risk: Completed · C3 interpretation:
-Completed · C4 real-time: Planned.
+Updated after every change that moves a number. How each step was checked: `docs/RAD-PLAN.md` → Build record.
 
-**Demo numbers (Table 4.13), "big" = UNSW-NB15 14/16/17/18.pcap:**
+**Cycles (Table 4.12):**
+
+| Cycle | Scope | Status |
+|---|---|---|
+| C1 | Foundation & offline mode (brief §10 steps 1–4) | Completed (awaiting owner demo) |
+| C2 | ACP & risk (steps 5–7) | Completed (awaiting owner demo) |
+| C3 | Interpretation (steps 8–10) | Completed (awaiting owner demo) |
+| C4 | Real-time mode (steps 11–12) | In progress (code and tests done; hardware check on the switch pending) |
+
+**Demo numbers (Table 4.13):**
 
 | Metric | Value |
 |---|---|
-| Capture | 7,629 MB, 13.7 M packets |
-| Raw alerts → groups → possible incidents | 1,349 → 1,004 → 209 (84.5% fewer than alerts; 96.7% before the October rule fixes); inside-LAN rules off |
-| Bands | Critical 6, High 19, Medium 84, Low 93, Note 7; network health 41 |
-| Processing time | Whole analysis 137 s for 7,629 MB (55.8 MB/s); ACP 3–6 alone 0.15 s |
-| LLM time per explanation | 91 s mean (46–117 s), CPU, 4 threads |
-| Verified explanations | 4 of 5 (the fifth correctly flagged for a band mismatch) |
-| Tests | 190 / 190 pass |
-
-All numbers come from `docs/progress.md`, which records how each was measured.
+| Capture size | 7,629 MB ("big": UNSW-NB15 14/16/17/18.pcap, 13.7 M packets); earlier 568 MB (`27.pcap`) |
+| Raw alerts | 1,349 ("big", with its LAN adoption and "Detect attacks from inside the LAN" off; 1,630 before adoption); 233 (`27.pcap`) |
+| Alert groups | 1,004 ("big": 25.6% fewer than alerts) |
+| Possible incidents | 209 (Critical 6, High 19, Medium 84, Low 93, Note 7); network health 41; largest incident 17% of alerts ("big", rules of change request 4) |
+| Reduction % | 84.5% (alerts → possible incidents, "big"; 96.7% before the stricter R2/R3/R4, which had merged unrelated alerts) |
+| Processing time | ACP 3–6: 0.15 s for 1,349 alerts; whole analysis 137 s for 7,629 MB (55.8 MB/s) ("big") |
+| LLM seconds per explanation | 91 s mean (46–117 s, 5 incidents, `llama3.2:3b`, CPU, 4 threads, ~2,300-token prompt) |
+| Verified explanations | 4 / 5 (the fifth flagged correctly: band mismatch; measured before C3 change request 2) |
+| Tests passed | 208 / 208 (2026-11-18) |
 
 ---
 
@@ -341,7 +349,7 @@ All numbers come from `docs/progress.md`, which records how each was measured.
 2. **Network:** show the analyses list. Open "big" (UNSW-NB15). Show the capture checks: the 25-minute gap where a
    file is missing. Optionally start a small upload and press **Stop** to show the clean-up.
 3. **Home:** health 41 and the incidents that cost the most points; devices at risk.
-4. **Alerts:** packets chart, alert mix ("not risk"), tick-box filters (e.g. priority 1 + 2), one raw JSON record.
+4. **Alerts:** packets chart, alert mix ("not risk"), tick-box filters (e.g. severity [1] High + [2] Medium), one raw JSON record.
 5. **Incidents:** sort by band. Open a Critical one: Attack → Victim, timeline, factor table. Explain one factor
    end to end, e.g. L3 = 5 because R2 fired.
 6. **Devices:** change a device's type (e.g. Server → Guest) and show the score and health change at once.
@@ -355,3 +363,16 @@ All numbers come from `docs/progress.md`, which records how each was measured.
 **Before the demo:** pre-generate explanations for the top incidents (`python -m netseer.cli pregen <id> --top 5`;
 about 1.5 min each); re-analyse older analyses so
 they use the current rules; check the screenshots in `docs/screenshots/`.
+
+**Commands:**
+```bash
+cd ~/FYP2_netseer && . .venv/bin/activate
+uvicorn netseer.src.api.main:app --host 0.0.0.0 --port 8000     # then open http://192.168.100.24:8000
+pytest netseer/tests                                            # integration tests need the 'suricata' group (log in again after usermod)
+python -m netseer.cli run-offline a.pcap b.pcap                 # CLI alternative to the upload page
+python -m netseer.cli acp all                                   # build incidents for analyses made before C2
+curl -sSLo netseer/ai/kb/enterprise-attack.json https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json
+python -m netseer.cli build-kb                                   # AI knowledge base (rules + ATT&CK + playbooks)
+python -m netseer.cli pregen <id> --top 5                       # pre-generate AI explanations for a demo
+python -m netseer.eval.acp_metrics <id> --rerun                 # Table 4.13 numbers + saturation check
+```

@@ -21,7 +21,7 @@ from typing import BinaryIO
 
 from netseer.src.config import CONFIG_DIR, SURICATA_CONFIG, adopt_lan, analysis_lan, app_config, get_setting
 from netseer.src.database import db
-from netseer.src.engine import ti
+from netseer.src.engine import oui, ti
 from netseer.src.engine.acp import rescore, run_acp
 from netseer.src.engine.capture_check import run_checks
 from netseer.src.engine.logger import process_eve_file
@@ -396,6 +396,7 @@ def run_offline(db_path: Path, data_dir: Path, analysis_id: int) -> None:
                      f"({size / (1 << 20) / max(secs, 0.001):.1f} MB/s), {log.n_events} events, "
                      f"{log.n_alerts} alerts, {n_devices} devices, {acp['groups']} alert groups, "
                      f"{acp['incidents']} possible incidents")
+        oui.online_vendors(conn, analysis_id)          # A3: fill unknown vendors from maclookup.app
         if ti.enrich(conn, analysis_id):     # optional TI, outside the Suricata lock; re-score with L5
             rescore(conn, analysis_id)
     except Stopped:

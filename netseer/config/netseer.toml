@@ -13,6 +13,7 @@ cloud_url = "https://api.openai.com/v1"   # any OpenAI-compatible API (opt-in, u
 cloud_model = ""
 retention_days = 0               # 0 = keep all analyses
 inside_rules = true              # A3: EXTERNAL_NET=any so ET rules also fire for an attacker inside the LAN
+mac_lookup_online = true         # A3: ask maclookup.app (OUI only) when the local MAC vendor lists have no entry
 auto_logout = true               # A12: sessions end after session_minutes unless extended; off = 12 h cap
 
 [app]

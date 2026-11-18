@@ -17,6 +17,7 @@ from pathlib import Path
 
 from netseer.src.config import analysis_lan, app_config, get_setting
 from netseer.src.database import db
+from netseer.src.engine import oui
 from netseer.src.engine.acp import run_acp
 from netseer.src.engine.ingest import classification_file, eve_dir
 from netseer.src.engine.logger import EveLogger, load_classtypes, parse_networks
@@ -176,6 +177,7 @@ def tick(conn, data_dir: Path, analysis_id: int) -> int:
     for line in lines:
         log.feed(conn, line)
     log.finish(conn)
+    oui.online_vendors(conn, analysis_id)
     conn.execute("UPDATE analyses SET eve_offset = ? WHERE id = ?", (offset, analysis_id))
     if log.n_alerts:
         run_acp(conn, analysis_id)

@@ -6,7 +6,8 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
 1. `docs/CONCEPTS.md`: **what** to build. Source of truth for features, risk model (A5), accounts (A12), modes (A13), device types (A14) and settings (A15).
 2. `docs/PROTOTYPE-BRIEF.md`: **how** to build it: environment (§3), layout (§4), schema (§5), pipeline (§6), AI (§7), auth (§8), pages (§9), **build steps and checks (§10)**.
 3. `docs/RAD-PLAN.md`: **when**: cycles C1–C4 and the schedule.
-4. `docs/progress.md`: where we are. Its **Change log** has one line per change: `[YYYY-MM-DD] change`, newest first.
+4. `docs/progress.md`: change log only, one line per finished task: `[YYYY-MM-DD] change`, newest first.
+   Build record (step Checks) and decisions to confirm: `docs/RAD-PLAN.md`. Report Tables 4.12/4.13 + demo commands: `docs/WRITEUP.md` §8/§10. Environment as built: `docs/PROTOTYPE-BRIEF.md` §3a.
 5. `dump.md`: the owner's idea inbox (see below).
 
 ## Style: always caveman + ponytail
@@ -33,13 +34,13 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
 
 ## dump.md: idea inbox
 - The owner writes new ideas under `## Inbox`.
-- Whenever Claude reads it: compare each idea with the related parts of `docs/` (CONCEPTS, PROTOTYPE-BRIEF, RAD-PLAN, WRITEUP, progress decisions) and give the owner a review per idea: **new / conflicts with <doc §> / duplicate of <doc §> / already done (<commit or progress line>)**, the docs it would change, risks, and a recommendation.
+- Whenever Claude reads it: compare each idea with the related parts of `docs/` (CONCEPTS, PROTOTYPE-BRIEF, RAD-PLAN incl. its decisions to confirm, WRITEUP) and give the owner a review per idea: **new / conflicts with <doc §> / duplicate of <doc §> / already done (<commit or progress line>)**, the docs it would change, risks, and a recommendation.
 - Execute only after the owner's go-ahead. Then move the idea to `## Reviewed` as `[YYYY-MM-DD] idea → verdict → commit`.
 - If an idea conflicts with CONCEPTS.md, CONCEPTS.md wins until the owner decides.
 
 ## How to work
 - Build **one brief §10 step (or one change request) at a time**: plan → brief workers → review → tests pass → pass its **Check**. Stop at the end of each cycle (C1–C4) for the owner's demo and go-ahead.
-- **After every finished task:** update the related `docs/` files (CONCEPTS/BRIEF when behaviour or spec changed, WRITEUP when the explanation changed, progress.md always: step log/decisions as needed + a Change log line), then commit and `git push origin main` (https://github.com/notassa/netseer), then summarise what changed.
+- **After every finished task:** update the related `docs/` files (CONCEPTS/BRIEF when behaviour or spec changed, WRITEUP when the explanation changed, RAD-PLAN Build record/decisions and WRITEUP §8 numbers as needed, progress.md always: one change-log line), then commit and `git push origin main` (https://github.com/notassa/netseer), then summarise what changed.
 - **Don't change** the risk constants, database schema, feature list or page set on your own. If something looks wrong, explain why and propose an edit to `docs/CONCEPTS.md` first.
 - Prefer small, readable modules matching the paths in CONCEPTS A2. Type hints, docstrings on public functions, no dead code.
 - Never commit secrets, API keys, pcaps, eve.json, databases or `.venv`; see `.gitignore`.
@@ -53,7 +54,7 @@ For anything that needs root (apt installs, `suricata-update`, files under `/etc
 - Python venv: `~/FYP2_netseer/.venv` (`. .venv/bin/activate`).
 - App: `uvicorn netseer.src.api.main:app --host 0.0.0.0 --port 8000`, run from the repo root. Never run the app as root.
 - Ollama on `localhost:11434`, model `llama3.2:3b`. CPU only (i5-9600T), about 1.5 min per explanation.
-- NICs: `eno1` = LAN, `enxec1ac300527e` = switch mirror port (see `docs/progress.md`).
+- NICs: `eno1` = LAN, `enxec1ac300527e` = switch mirror port (see `docs/PROTOTYPE-BRIEF.md` §3a).
 - opencode v2.3.2 (`~/.opencode/bin/opencode`), DeepSeek credentials stored.
 
 ## Code conventions
@@ -63,4 +64,4 @@ For anything that needs root (apt installs, `suricata-update`, files under `/etc
 
 ## Hand-back for the report (written on the Windows machine)
 - Screenshots go to `docs/screenshots/` with the names in brief §12 (`01-login.png` … `13-network-live.png`).
-- Record in `docs/progress.md`: per-cycle status (Completed / In progress / Planned) for report Table 4.12, and demo numbers for Table 4.13 (capture size, raw alerts, groups, incidents, reduction %, processing time, LLM seconds per explanation, verified explanations, tests passed).
+- Record in `docs/WRITEUP.md` §8: per-cycle status (Completed / In progress / Planned) for report Table 4.12, and demo numbers for Table 4.13 (capture size, raw alerts, groups, incidents, reduction %, processing time, LLM seconds per explanation, verified explanations, tests passed).

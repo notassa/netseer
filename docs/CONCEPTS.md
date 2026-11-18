@@ -47,7 +47,7 @@ All paths are relative to `netseer/`. Folders marked *new* are added to the exis
 
 ### A3. Data sources: Suricata's own protocol logs instead of a custom pcap scraper
 Enable the eve.json types `alert, anomaly, flow, dns, http, tls, dhcp, smb, ssh, fileinfo` and `ethernet: yes` (MAC addresses). These give "metadata from the pcap" with no extra parser. Exception: **Linux cooked (SLL) captures** (e.g. UNSW-NB15) have no Ethernet header, so eve.json has no MACs; NetSeer then reads the sender MAC that SLL keeps per packet (`tcpdump -e`, most common MAC per source IP, first 2 M packets; a MAC shared by 3 or more source IPs is a router's and is not given to them):
-- **Device context:** MAC → vendor (Wireshark `manuf` list with 24/28/36-bit blocks, updatable from Settings; the offline IEEE OUI file until it is downloaded), DHCP hostname, DNS/mDNS names, TLS JA3/JA4, HTTP user-agent, observed services.
+- **Device context:** MAC → vendor (Wireshark `manuf` list with 24/28/36-bit blocks, updatable from Settings; the offline IEEE OUI file until it is downloaded; when both have no entry and the setting `mac_lookup_online` is on (default), maclookup.app is asked with the OUI only, never for randomised MACs, and the answer, found or not, is cached in `ti_cache` (`maclookup:<OUI>`) until Detonate), DHCP hostname, DNS/mDNS names, TLS JA3/JA4, HTTP user-agent, observed services.
 - **Packets/hour graph:** sum `flow.pkts_toserver + pkts_toclient` per hour. Alerts alone carry no packet counts.
 - **Rulesets:** ET Open plus the abuse.ch Suricata sets (SSLBL, URLhaus, ThreatFox), managed with `suricata-update`. Many ET rules carry `metadata: mitre_tactic_id, mitre_technique_id, signature_severity, attack_target`; use them directly.
 - **Detect attacks from inside the LAN** (setting `inside_rules`, default on): Suricata runs with **EXTERNAL_NET = any** (HOME_NET stays the analysis's LAN). Many ET rules are written `$EXTERNAL_NET → $HOME_NET`; with the default `!$HOME_NET` an attacker inside the LAN never matches them (the "realnetwork" capture: an nmap scan from 192.168.100.139 raised no ET SCAN alert). The cost is LAN policy alerts: on UNSW-NB15 ("big") it adds about 65,000 (BitTorrent, portmap, ICQ between the testbed hosts), so turn it off for testbed captures.
@@ -185,7 +185,7 @@ The UI shows "Verified" or "N flagged claims" and highlights flagged sentences.
 - **Further controls:** audit log (logins, logouts, failed logins and session expiry with client **IP and MAC**, setup, uploads, analysis success/failure, live start/stop, setting and API-key changes). The MAC comes from the server's neighbour (ARP) table, so it is known only for clients on the same LAN; otherwise it is stored as unknown; pcap validation (magic bytes, size cap); unprivileged services; API keys encrypted at rest (Fernet); Nginx TLS, bound to the LAN, rate-limited.
 - **Live-mode privilege:** the web app never runs as root. Packet capture runs in a systemd unit with only `CAP_NET_RAW`/`CAP_NET_ADMIN`, started through a narrow sudoers/polkit rule (A13).
 - **Mapping:** ISO/IEC 27001:2022 Annex A (A.5.15, A.5.17, A.8.2, A.8.5, A.8.15, A.8.20, A.8.24, A.8.26, A.8.28) and OWASP ASVS 5.0.
-- **Privacy:** VirusTotal, AbuseIPDB and the cloud LLM are opt-in, use the user's own key, look up external IPs only, and are cached.
+- **Privacy:** VirusTotal, AbuseIPDB and the cloud LLM are opt-in, use the user's own key, look up external IPs only, and are cached. The MAC vendor fallback (maclookup.app, no key, on by default, can be switched off) sends only the 6-hex-digit OUI of a non-randomised MAC, which names the maker, not the device.
 
 ### A10. Dashboard pages (fills "Home: ?")
 | Page | Content |
@@ -270,6 +270,7 @@ Stored in the `settings` table, with defaults from `config/netseer.toml`:
 | Rules update | "Update Suricata rules" button (`sudo suricata-update`, no arguments allowed by sudoers), then the KB is rebuilt |
 | KB rebuild | button |
 | MAC vendor list | Wireshark `manuf`, "Update to the latest version" button; shows the list's version date |
+| Look up unknown MAC vendors online | on (maclookup.app, OUI only, cached until Detonate, A3) |
 | Data retention | keep all, or delete analyses older than N days |
 
 Changing a window or the half-life re-runs ACP 3–6 for the selected analysis.
