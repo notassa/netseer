@@ -6,30 +6,53 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
 1. `docs/CONCEPTS.md`: **what** to build. Source of truth for features, risk model (A5), accounts (A12), modes (A13), device types (A14) and settings (A15).
 2. `docs/PROTOTYPE-BRIEF.md`: **how** to build it: environment (§3), layout (§4), schema (§5), pipeline (§6), AI (§7), auth (§8), pages (§9), **build steps and checks (§10)**.
 3. `docs/RAD-PLAN.md`: **when**: cycles C1–C4 and the schedule.
-4. `docs/progress.md`: where we are. Create it in step 0 and keep it current.
+4. `docs/progress.md`: where we are. Its **Change log** has one line per change: `[YYYY-MM-DD] change`, newest first.
+5. `dump.md`: the owner's idea inbox (see below).
 
-`dump.md` holds the owner's raw notes. If it conflicts with CONCEPTS.md, ask.
+## Roles: Claude orchestrates, DeepSeek workers code
+- **Claude (orchestrator):** analyse, plan, split work into small tasks, write worker briefs, review every worker diff, run tests, update docs, commit and push. Claude may write code itself only for fixes too small to brief (a few lines) or when a worker failed twice.
+- **Workers:** DeepSeek models through opencode, one scoped coding task each. Their rules are in `AGENTS.md`.
+- **Call a worker** from the repo root:
+  ```bash
+  opencode run -m deepseek/deepseek-v4-pro --auto --title "<task>" "<brief>"
+  ```
+  Use `deepseek/deepseek-flash` for trivial, mechanical edits. Independent tasks may run in parallel only if they touch different files.
+- **A brief contains:** goal; exact files to edit (and files to read); the interfaces/functions to use, with paths; constants and numbers copied from the docs (never "as in the docs"); the test to add and the command that must pass; what is out of scope.
+
+## Zero hallucination
+- No claim without evidence: a `file:line`, command output or test result. If it is not verified, say "unknown" or ask the owner.
+- Never report a number (timings, counts, test totals) that was not measured in this session.
+- Review every worker change with `git diff`, line by line, before accepting it. Reject and re-brief (or revert) output that invents APIs, files, settings, constants or results, edits files outside the brief, or changes tests to make them pass.
+- Run `pytest netseer/tests` after every accepted change; a task is not done while any test fails.
+- Check library usage against the installed version (`.venv`), not memory.
+
+## dump.md: idea inbox
+- The owner writes new ideas under `## Inbox`.
+- Whenever Claude reads it: compare each idea with the related parts of `docs/` (CONCEPTS, PROTOTYPE-BRIEF, RAD-PLAN, WRITEUP, progress decisions) and give the owner a review per idea: **new / conflicts with <doc §> / duplicate of <doc §> / already done (<commit or progress line>)**, the docs it would change, risks, and a recommendation.
+- Execute only after the owner's go-ahead. Then move the idea to `## Reviewed` as `[YYYY-MM-DD] idea → verdict → commit`.
+- If an idea conflicts with CONCEPTS.md, CONCEPTS.md wins until the owner decides.
 
 ## How to work
-- Build **one brief §10 step at a time**. For each step: implement it, write and run its tests, pass its **Check**, update `docs/progress.md`, commit, push, then summarise what changed. Continue through the steps of the current cycle. **Stop at the end of each cycle (C1–C4)** for the owner's demo and go-ahead.
+- Build **one brief §10 step (or one change request) at a time**: plan → brief workers → review → tests pass → pass its **Check**. Stop at the end of each cycle (C1–C4) for the owner's demo and go-ahead.
+- **After every finished task:** update the related `docs/` files (CONCEPTS/BRIEF when behaviour or spec changed, WRITEUP when the explanation changed, progress.md always: step log/decisions as needed + a Change log line), then commit and `git push origin main` (https://github.com/notassa/netseer), then summarise what changed.
 - **Don't change** the risk constants, database schema, feature list or page set on your own. If something looks wrong, explain why and propose an edit to `docs/CONCEPTS.md` first.
 - Prefer small, readable modules matching the paths in CONCEPTS A2. Type hints, docstrings on public functions, no dead code.
 - Never commit secrets, API keys, pcaps, eve.json, databases or `.venv`; see `.gitignore`.
 - Commit messages: imperative summary line (e.g. `Add offline ingest with mergecap`), optional body, and the Co-Authored-By attribution line your environment specifies.
 
 ## sudo: you can't type the password
-For anything that needs root (apt installs, `suricata-update`, files under `/etc`, systemd units, sudoers, `ufw`, Ollama install), **don't run it yourself**. Print the exact commands as one block for the owner to run in the VS Code terminal, wait for "done", then verify the result yourself with read-only commands.
+For anything that needs root (apt installs, `suricata-update`, files under `/etc`, systemd units, sudoers, `ufw`, Ollama install), **don't run it yourself** and never let a worker do it. Print the exact commands as one block for the owner to run in the VS Code terminal, wait for "done", then verify the result yourself with read-only commands.
 
 ## Environment
 - Ubuntu Server 24.04, user `netseer`, host 192.168.100.24 (LAN). Repo at `~/FYP2_netseer`.
-- Python venv: `~/FYP2_netseer/.venv` (`python3 -m venv .venv && . .venv/bin/activate`).
+- Python venv: `~/FYP2_netseer/.venv` (`. .venv/bin/activate`).
 - App: `uvicorn netseer.src.api.main:app --host 0.0.0.0 --port 8000`, run from the repo root. Never run the app as root.
-- Ollama on `localhost:11434`, model `llama3.2:3b`. CPU only (i5-9600T), so expect about a minute per explanation.
-- Two NICs: one LAN (dashboard), one for the switch mirror port (real-time, cycle C4). Record their names in `docs/progress.md` during step 0.
+- Ollama on `localhost:11434`, model `llama3.2:3b`. CPU only (i5-9600T), about 1.5 min per explanation.
+- NICs: `eno1` = LAN, `enxec1ac300527e` = switch mirror port (see `docs/progress.md`).
+- opencode v2.3.2 (`~/.opencode/bin/opencode`), DeepSeek credentials stored.
 
 ## Code conventions
-- Package root `netseer/` with the existing skeleton: `src/api`, `src/engine` (new), `src/database` (+ `pcaps/`, `eves/`), `ai`, `web/templates`, `web/static`, `config`, `tests`, `eval` (new), `cli.py` (new). Add `__init__.py` files.
-- Rename `ai/llm-caller.py` → `ai/llm_caller.py` and `ai/prompt-maker.py` → `ai/prompt_maker.py`.
+- Package root `netseer/`: `src/api`, `src/engine`, `src/database` (+ `pcaps/`, `eves/`), `ai`, `web/templates`, `web/static`, `config`, `tests`, `eval`, `cli.py`.
 - SQLite via the stdlib `sqlite3` (WAL mode). FastAPI + Jinja2 + vanilla JS + Chart.js (vendored, offline). No frontend build step.
 - Tests: `pytest netseer/tests`. The scorer must reproduce the CONCEPTS A5.6 worked example exactly (health = 62).
 

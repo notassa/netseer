@@ -16,10 +16,12 @@ Then start cycle C1, step 1 of PROTOTYPE-BRIEF §10. Work step by step through C
 
 ## Later sessions
 ```
-Continue NetSeer. Read CLAUDE.md and docs/progress.md, then carry on from the next unfinished step in PROTOTYPE-BRIEF §10. Stop at the end of the current cycle for my demo.
+Continue NetSeer. Read CLAUDE.md, AGENTS.md and docs/progress.md (Change log first). Review any ideas in the dump.md Inbox against docs/ and wait for my go-ahead on them. Otherwise carry on from the next unfinished step in PROTOTYPE-BRIEF §10: you plan and review, DeepSeek workers (opencode) code. Stop at the end of the current cycle for my demo.
 ```
 
 ## Useful one-liners
 - After a cycle demo: `Cycle C1 approved. Start C2.`
+- New ideas: write them under `## Inbox` in `dump.md`, then: `Review the dump.md Inbox.`
+- Go-ahead on reviewed ideas: `Build ideas 1 and 3 from the review.`
 - If you want a change: `Change request: <what>. Update docs/CONCEPTS.md first, show me the diff, then implement.`
 - For report material: `Take the screenshots for the finished pages per brief §12 and update the Table 4.12/4.13 data in docs/progress.md.`

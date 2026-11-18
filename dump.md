@@ -1,3 +1,17 @@
+# dump.md — owner's idea inbox
+
+How it works (see CLAUDE.md "dump.md: idea inbox"):
+- Write new ideas under **Inbox**, one bullet each. Rough wording is fine.
+- Claude reviews each idea against `docs/` (new / conflicts / duplicate / already done) and waits for your go-ahead before building it.
+- Reviewed ideas move to **Reviewed** as `[YYYY-MM-DD] idea → verdict → commit`.
+
+## Inbox
+
+## Reviewed
+
+## Archive
+Original raw notes (before cycle C1). Absorbed into `docs/CONCEPTS.md` on 2026-10-21; CONCEPTS.md wins where they differ.
+
 Title: "Netseer: AI-Assisted Alert Interpretation System for Intrusion Detection Monitoring in Small Networks"
 
 Overview:

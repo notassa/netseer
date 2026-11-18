@@ -1,6 +1,21 @@
 # NetSeer — progress
 
-Last updated: 2026-10-21
+Last updated: 2026-11-18
+
+## Change log
+Format: `[YYYY-MM-DD] change`, newest first. One line per finished task; details go in the Step log and decision sections below.
+
+- [2026-11-18] Add orchestrator/worker workflow: Claude plans and reviews, DeepSeek workers (opencode) code (`CLAUDE.md`, new `AGENTS.md`); `dump.md` becomes an idea inbox reviewed against `docs/`; this dated change log
+- [2026-11-03] Commit the prototype to GitHub (`6030a05 Add NetSeer FYP2 prototype`)
+- [2026-10-22 – 2026-11-03] C3 change requests 2–5: algorithm review, inside-LAN detection, upload checks, AI stop, map and alert-page changes (exact dates not recorded; see the decision sections below)
+- [2026-10-22] Steps 11 + 12: live mode code done; hardware check partly done (switch SPAN source ports still to set)
+- [2026-10-21] C3 change request 1: services fold, MACs + Wireshark vendors, saved AI, tree map, Clear log, Settings tabs
+- [2026-10-21] Steps 8–10: knowledge base + RAG, evidence + LLM + verifier + AI page, optional TI + cloud backend
+- [2026-10-21] Subnet auto-adopt
+- [2026-10-21] C2 change request: timeline, 20-row tables, pie %, health model, capture checks, subnets, map
+- [2026-10-21] Steps 5–7: contextor, scorer + roll-up, incidents + Home + NetSeer configuration
+- [2026-10-21] C1 polish, change request 3, Fix + Detonate, C1 change request (large uploads, progress bar, Information page)
+- [2026-10-21] Steps 0–4: environment audit, skeleton, auth, offline ingest, devices
 
 ## Environment (step 0 audit, 2026-10-21)
 
@@ -37,7 +52,6 @@ Estimate for one explanation (~2,500 prompt tokens, ~400 output tokens): about 5
 
 ### Open environment items
 - The packaged `suricata.service` is enabled and crash-loops on the non-existent `eth0` (325+ restarts), burning one core. NetSeer doesn't use it: `sudo systemctl disable --now suricata`.
-- GitHub push: the server key `~/.ssh/id_ed25519.pub` (`SHA256:+olpmzCNKYXPPJRmAb5oomGSnif3a5B2QOopEezyVGM`) is not yet accepted by GitHub. Commits are made locally and pushed once it is.
 
 ## Cycle status (report Table 4.12)
 
