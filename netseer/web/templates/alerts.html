@@ -29,7 +29,7 @@
     {% if total or mix.classtype %}
     <div class="row-actions" style="margin-bottom:.5rem">
       <button class="btn small primary" data-mix="classtype">By classtype</button>
-      <button class="btn small" data-mix="priority">By priority</button>
+      <button class="btn small" data-mix="priority">By severity</button>
     </div>
     <div class="chart-box"><canvas id="mix-chart"></canvas></div>
     <div class="field-hint">How the alerts divide up (not risk). A large share does not mean high risk; risk is scored per incident.</div>
@@ -67,9 +67,9 @@
   </div>
   {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
   <div class="tick-groups">
-  {% for key, title in [("priority", "Priority"), ("sig_severity", "Severity"), ("direction", "Direction"), ("classtype", "Class")] %}
+  {% for key, title in [("priority", "Severity"), ("direction", "Direction"), ("classtype", "Class")] %}
     <fieldset><legend>{{ title }}</legend>
-      {% for v in ticks[key] %}<label><input type="checkbox" name="{{ key }}" value="{{ v }}" {{ 'checked' if v | string in params.get(key, []) }}> {{ v }}</label>{% endfor %}
+      {% for v in ticks[key] %}<label><input type="checkbox" name="{{ key }}" value="{{ v }}" {{ 'checked' if v | string in params.get(key, []) }}> {% if key == "priority" %}{{ v | int | severity }}{% else %}{{ v }}{% endif %}</label>{% endfor %}
     </fieldset>
   {% endfor %}
   </div>
@@ -78,22 +78,21 @@
 </details>
 <div class="table-wrap">
 <table class="data sortable" id="alerts-table" data-server-sort>
-  <thead><tr><th data-key="time">Time (UTC)</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="priority">Priority</th><th data-key="severity">Severity</th><th data-key="direction">Direction</th></tr></thead>
+  <thead><tr><th data-key="time">Time (UTC)</th><th data-key="severity">Severity</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="direction">Direction</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th></tr></thead>
   <tbody>
   {% for a in rows %}
   <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
     <td>{{ a.ts[:19] | replace('T', ' ') if a.ts else '' }}</td>
+    <td>{{ unk(a.priority | severity) }}</td>
+    <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
+    <td>{{ unk(a.classtype) }}</td>
+    <td>{{ unk(a.direction) }}</td>
     <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
     <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
     <td>{{ a.proto or '' }}{% if a.app_proto %}/{{ a.app_proto }}{% endif %}</td>
-    <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
-    <td>{{ unk(a.classtype) }}</td>
-    <td>{{ unk(a.priority) }}</td>
-    <td>{{ unk(a.sig_severity) }}</td>
-    <td>{{ unk(a.direction) }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="9" class="muted">No alerts match.</td></tr>
+  <tr><td colspan="8" class="muted">No alerts match.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -146,7 +145,8 @@
   const mix = {{ mix | tojson }};
   const mixCanvas = document.getElementById("mix-chart");
   if (mixCanvas) {
-    const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `priority ${key}` : key);
+    const SEV = {1: "High", 2: "Medium", 3: "Low", 4: "Info"};
+    const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `[${key}] ${SEV[key] || ""}`.trim() : key);
     const palette = [1, 2, 3, 4, 5, 6, 7, 8].map(i => css.getPropertyValue(`--chart-${i}`).trim());
     const SLICES = 7;                       // the rest is folded into "other" so the pie stays readable
     const narrow = () => mixCanvas.parentElement.clientWidth < 520;

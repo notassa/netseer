@@ -8,6 +8,9 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-18] Alerts table: Time (UTC), Severity, Signature, Class, Direction, Source, Destination, Proto; Priority → Severity [1] High…[4] Info → new; done (also incident raw alerts, filters, pie) → CONCEPTS A5.5/A10, brief §9
+- [2026-11-18] Map shouldn't show "netmask" as a source → no netmask node existed; meant broadcast/multicast/unspecified addresses → hidden unless a device (.0 hosts kept) → CONCEPTS A17
+- [2026-11-18] Home: Analysis card above Network health & Top incidents → new; done → CONCEPTS A10, brief §9
 
 ## Archive
 Original raw notes (before cycle C1). Absorbed into `docs/CONCEPTS.md` on 2026-10-21; CONCEPTS.md wins where they differ.

@@ -133,7 +133,7 @@ Why not a plain mean: averaging let asset value outvote the attack type. With a 
 - **Saturation check:** `eval/acp_metrics.py` prints health as incidents are added worst first. Report the remaining independence assumption as a limitation.
 
 #### A5.5 Alert mix (Munir Ch.5, descriptive only)
-On the Alerts page, show nᵢ / N by classtype and by priority as a pie chart titled **"Detected Alert Classes"** (with the note that shares are not risk). It never feeds the health score.
+On the Alerts page, show nᵢ / N by classtype and by severity (the Suricata priority shown as [1] High, [2] Medium, [3] Low, [4] Info) as a pie chart titled **"Detected Alert Classes"** (with the note that shares are not risk). It never feeds the health score.
 
 #### A5.6 Worked example (use as a unit-test fixture)
 LAN 10.0.0.0/24. Server 10.0.0.5 is typed **Server** (I1 9). Workstation 10.0.0.23 is typed **Workstation** (I1 6).
@@ -191,9 +191,9 @@ The UI shows "Verified" or "N flagged claims" and highlights flagged sentences.
 | Page | Content |
 |---|---|
 | Login | Username and password. On first launch (no admin yet) it shows **Create administrator** instead (A12) |
-| Home | Network health gauge (A5.4) with the top 3 contributing devices, top 5 incidents (band chip, title, time), devices at risk, alert trend, current analysis status |
+| Home | Current analysis card (name, status, counts) on top, then the network health gauge (A5.4) with the top 3 contributing devices, top 5 incidents (band chip, title, time), devices at risk, alert trend |
 | Network | **Mode selection** (offline / real-time), one-file-at-a-time upload into a **session**, live NIC status and stall messages, **analyses browser** (list, open, rename, files, re-analyse, admin **note**, delete as admin), **Stop** a queued/running analysis (admin; kills Suricata, clears its results, keeps the capture; status `stopped`, can be re-analysed) |
-| Alerts | **Packets per *x* minutes** and **alerts per *x* minutes** charts side by side, each with its own bin size and Update button, **top 5 devices by alerts** (sent, received, total), **alert mix** chart (A5.5), alert table with a collapsible **Filters** frame (search, IPs, SID, and tick boxes for priority, severity, direction and class; ticked values in one group are OR-ed), raw JSON drawer |
+| Alerts | **Packets per *x* minutes** and **alerts per *x* minutes** charts side by side, each with its own bin size and Update button, **top 5 devices by alerts** (sent, received, total), **alert mix** chart (A5.5), alert table with the columns Time (UTC), Severity, Signature, Class, Direction, Source, Destination, Proto (**Severity** = Suricata priority as [1] High, [2] Medium, [3] Low, [4] Info; ET `signature_severity` is kept for scoring and the raw JSON, not shown as a column) and a collapsible **Filters** frame (search, IPs, SID, and tick boxes for severity, direction and class; ticked values in one group are OR-ed), raw JSON drawer |
 | Incidents | Table (band, score, title, rule, hosts, span) → detail: **Attack → Victim** pairs (source → destination IPs as Suricata saw them, with device name/type or "outside the LAN", alerts, main signature; top 10), timeline, alert groups, factor breakdown (A5.2), linked raw alerts |
 | Devices | Inventory (IP, MAC/vendor, hostname, services, type, risk %), device-type editor; the attribution prompt appears after each offline analysis and for new devices in live mode. **External sources** table: every IP outside the LAN CIDRs seen in the analysis (hostname from DNS/TLS SNI/HTTP host, direction, first/last seen, flows, bytes, alerts, ports, internal peers) |
 | AI | Per-incident interpretation, Prompt Maker buttons, verifier badge, regenerate, **progress %** while generating (an estimate from the last 10 timed runs, held at 95% until done), **Stop** (the stream to Ollama is closed, nothing is saved), **Clear saved explanations** of the analysis (admin, confirm, audited) |
@@ -298,7 +298,7 @@ The captures are checked so that gaps in the evidence are visible next to the re
    **Auto-adopt:** when the networks outside the LAN CIDRs whose hosts talk among outside networks (looks local, even if DHCP or VLAN evidence also marks them) hold more hosts than the analysis's internal devices (a testbed on public addresses such as UNSW-NB15), NetSeer adopts them as that analysis's LAN (stored per analysis, key `lan_cidrs:<id>`), logs `lan_adopted` and runs the analysis once more with the wider HOME_NET. Adoption happens at most once per analysis; the global LAN CIDRs do not change.
 
 **Network map.** A movable and zoomable graph built with Cytoscape.js (vendored):
-- **Nodes:** networks as groups, internal devices coloured by their worst incident band (A5.4), the top 40 external sources by alerts then bytes (the rest collapsed into one node), and an Internet node.
+- **Nodes:** networks as groups, internal devices coloured by their worst incident band (A5.4), the top 40 external sources by alerts then bytes (the rest collapsed into one node), and an Internet node. Broadcast (directed or 255.255.255.255), multicast and unspecified addresses are not hosts and are left out unless they are devices.
 - **Edges:** observed communication from `host_links` (flows, bytes, alerts; red when alerts > 0).
 - Layout: **Tree** only (Internet → network → **gateway → its clients**; hosts go straight under the network when no gateway is known; outside sources under Internet). Traffic links are hidden; clicking a host shows its links that carried alerts, clicking empty space hides them. **Hold the right button and drag to pan**; left click selects and shows details; left-dragging a node moves everything under it.
 

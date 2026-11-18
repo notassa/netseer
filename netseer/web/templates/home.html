@@ -6,6 +6,19 @@
 {% if not selected %}
 <div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
 {% else %}
+<div class="card">
+  <h2 style="margin-top:0">Analysis</h2>
+  <p><strong>{{ analysis.name }}</strong> <span class="badge {{ analysis.status | status_class }}">{{ analysis.status | replace('_', ' ') }}</span></p>
+  <div class="stats">
+    <div class="stat"><div class="value">{{ analysis.n_events }}</div><div class="label">Events</div></div>
+    <div class="stat"><div class="value">{{ counts.alerts }}</div><div class="label">Alerts</div></div>
+    <div class="stat"><div class="value">{{ counts.groups }}</div><div class="label">Alert groups</div></div>
+    <div class="stat"><div class="value">{{ counts.incidents }}</div><div class="label">Possible incidents</div></div>
+    <div class="stat"><div class="value">{{ counts.devices }}</div><div class="label">Devices</div></div>
+  </div>
+  {% if analysis.error %}<p class="muted" style="margin-bottom:0">{{ analysis.error }}</p>{% endif %}
+</div>
+
 <div class="grid">
   <div class="card">
     <h2 style="margin-top:0">Network health</h2>
@@ -65,19 +78,6 @@
     {% if trend %}<div class="chart-box" style="height:200px"><canvas id="trend-chart"></canvas></div>
     {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
   </div>
-</div>
-
-<div class="card">
-  <h2 style="margin-top:0">Analysis</h2>
-  <p><strong>{{ analysis.name }}</strong> <span class="badge {{ analysis.status | status_class }}">{{ analysis.status | replace('_', ' ') }}</span></p>
-  <div class="stats">
-    <div class="stat"><div class="value">{{ analysis.n_events }}</div><div class="label">Events</div></div>
-    <div class="stat"><div class="value">{{ counts.alerts }}</div><div class="label">Alerts</div></div>
-    <div class="stat"><div class="value">{{ counts.groups }}</div><div class="label">Alert groups</div></div>
-    <div class="stat"><div class="value">{{ counts.incidents }}</div><div class="label">Possible incidents</div></div>
-    <div class="stat"><div class="value">{{ counts.devices }}</div><div class="label">Devices</div></div>
-  </div>
-  {% if analysis.error %}<p class="muted" style="margin-bottom:0">{{ analysis.error }}</p>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

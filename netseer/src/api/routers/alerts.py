@@ -17,11 +17,10 @@ from netseer.src.engine.constants import DEVICE_TYPE_LABEL
 router = APIRouter(dependencies=[Depends(require_user)])
 
 DIRECTIONS = ("ext->int", "int->ext", "int->int", "ext->ext")
-SEVERITIES = ("Critical", "Major", "Minor", "Informational")
-TICKS = {"priority": ("1", "2", "3", "4"), "sig_severity": SEVERITIES, "direction": DIRECTIONS, "classtype": None}
+TICKS = {"priority": ("1", "2", "3", "4"), "direction": DIRECTIONS, "classtype": None}
 FILTER_KEYS = ("q", "src_ip", "dest_ip", "sid", *TICKS)
 ALERT_SORT = {"time": "ts", "src": "src_ip", "dest": "dest_ip", "proto": "proto", "signature": "signature",
-              "class": "classtype", "priority": "priority", "severity": "sig_severity", "direction": "direction"}
+              "class": "classtype", "severity": "priority", "direction": "direction"}
 
 
 def _filters(params: dict[str, str | list[str]]) -> tuple[str, list]:
@@ -59,7 +58,7 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
     pg = paging(params, total)
     rows = conn.execute(
         f"SELECT id, ts, src_ip, src_port, dest_ip, dest_port, proto, app_proto, sid, signature, classtype, "
-        f"priority, sig_severity, direction FROM alerts WHERE analysis_id = ?{where} "
+        f"priority, direction FROM alerts WHERE analysis_id = ?{where} "
         f"ORDER BY {order_by(params, ALERT_SORT, 'ts')}, id LIMIT ? OFFSET ?",
         (selected["id"], *args, pg["limit"], pg["offset"]),
     ).fetchall()
@@ -71,7 +70,7 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         "pg": pg,
         "params": params,
         "qs": page_qs(params),
-        "ticks": {"priority": TICKS["priority"], "sig_severity": SEVERITIES, "direction": DIRECTIONS,
+        "ticks": {"priority": TICKS["priority"], "direction": DIRECTIONS,
                   "classtype": distinct_values(conn, "SELECT classtype AS v FROM alerts WHERE analysis_id = ?",
                                                (selected["id"],), 50)},
         "n_filters": sum(k in params for k in FILTER_KEYS),

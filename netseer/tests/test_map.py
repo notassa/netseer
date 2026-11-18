@@ -61,6 +61,19 @@ def test_map_api(admin_client):  # noqa: F811
     c.close()
 
 
+def test_non_host_addresses_are_not_drawn(conn):  # noqa: F811
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, risk, attributed) "
+                 "VALUES (1, '10.0.0.5', 'server', 9, 0.5, 1)")
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, risk, attributed) "
+                 "VALUES (1, '10.0.0.0', 'server', 9, 0.5, 1)")                 # .0 host that IS a device
+    for peer in ("10.0.0.255", "224.0.0.251", "ff02::fb", "0.0.0.0", "10.0.0.0"):
+        conn.execute("INSERT INTO host_links(analysis_id, a, b, flows, bytes, alerts) "
+                     "VALUES (1, '10.0.0.5', ?, 10, 1000, 0)", (peer,))
+    node_ids = {n["data"]["id"] for n in build_map(conn, 1)["nodes"]}
+    assert {"10.0.0.0", "10.0.0.5"} <= node_ids
+    assert node_ids.isdisjoint({"10.0.0.255", "224.0.0.251", "ff02::fb", "0.0.0.0"})
+
+
 def test_clients_hang_off_their_gateway(conn):  # noqa: F811
     seed(conn)
     conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) VALUES (1, '10.0.0.1', 'network', 8, 1)")

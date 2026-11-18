@@ -96,7 +96,7 @@
 <h2>Raw alerts <span class="muted" style="font-weight:normal">({% if inc.n_alerts > raw_limit %}first {{ raw_limit }} of {% endif %}{{ inc.n_alerts }})</span></h2>
 <div class="table-wrap">
 <table class="data">
-  <thead><tr><th>Time (UTC)</th><th>Source</th><th>Destination</th><th>Signature</th><th>Priority</th><th>Severity</th><th>Direction</th></tr></thead>
+  <thead><tr><th>Time (UTC)</th><th>Source</th><th>Destination</th><th>Signature</th><th>Severity</th><th>Direction</th></tr></thead>
   <tbody>
   {% for a in alerts %}
   <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
@@ -104,8 +104,7 @@
     <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
     <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
     <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
-    <td>{{ unk(a.priority) }}</td>
-    <td>{{ unk(a.sig_severity) }}</td>
+    <td>{{ unk(a.priority | severity) }}</td>
     <td>{{ unk(a.direction) }}</td>
   </tr>
   {% endfor %}

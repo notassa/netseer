@@ -137,9 +137,9 @@ def test_external_sources_table_search_and_sort(analysed):
 def test_alerts_sort_whitelist_and_search_lists(analysed):
     client, conn = analysed
     table = lambda url: client.get(url).text.split('id="alerts-table"', 1)[1]
-    asc = table("/alerts?sort=priority&dir=asc")
+    asc = table("/alerts?sort=severity&dir=asc")
     assert asc.index("TEST Malware C2 beacon") < asc.index("TEST alert without metadata")
-    desc = table("/alerts?sort=priority&dir=desc")
+    desc = table("/alerts?sort=severity&dir=desc")
     assert desc.index("TEST alert without metadata") < desc.index("TEST Malware C2 beacon")
     page = client.get("/alerts").text
     assert client.get("/alerts?sort=1;DROP TABLE alerts").status_code == 200
@@ -154,7 +154,7 @@ def test_alert_tick_filters_combine_values(analysed):
     assert count("/alerts?priority=1") == 2
     assert count("/alerts?priority=1&priority=3") == 3                          # any ticked value
     assert count("/alerts?priority=9&direction=nowhere") == 4                    # values outside the lists are ignored
-    assert count("/alerts?sig_severity=Critical&priority=1") == 1
+    assert count("/alerts?sig_severity=Critical") == 4          # sig_severity no longer filters the table
     page = client.get("/alerts?priority=1&priority=3").text
     assert '<details class="filter-frame" open>' in page and "2 active" not in page and "1 active" in page
     assert 'name="priority" value="3" checked' in page and 'name="priority" value="2" checked' not in page
@@ -175,6 +175,10 @@ def test_alerts_per_minutes_and_top_devices(analysed):
 def test_column_heads_get_their_meaning_as_tooltips(analysed):
     client, _ = analysed
     page = client.get("/alerts").text
-    assert "Suricata rule priority: 1 = highest" in page and 'th:not([title])' in page
+    assert "Suricata rule priority as severity" in page and 'th:not([title])' in page
+    assert "[1] High" in page
+    head = page.split('id="alerts-table"', 1)[1].split("</thead>", 1)[0]
+    assert re.findall(r'data-key="([^"]+)"', head) == \
+        ["time", "severity", "signature", "class", "direction", "src", "dest", "proto"]
     heads = set(re.findall(r"<th[^>]*>([^<{]+)</th>", page))
     assert heads and heads <= set(COLUMN_HELP), heads - set(COLUMN_HELP)     # every alerts-page column is explained

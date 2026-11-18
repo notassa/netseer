@@ -1,7 +1,8 @@
 """Network map data for the Devices page (CONCEPTS A17), in Cytoscape.js element format.
 
 Nodes: an Internet root, the discovered networks, the hosts inside them (internal devices and hosts of
-"looks local" networks), the busiest outside sources (the rest folded into one node). Edges: `tree` edges
+"looks local" networks), the busiest outside sources (the rest folded into one node); broadcast, multicast and
+unspecified addresses are dropped (they aren't hosts). Edges: `tree` edges
 (Internet → network → host, Internet → outside source) give the Tree layout its shape; `link` edges are the
 observed traffic between hosts (host_links), red when they carried alerts.
 """
@@ -14,7 +15,7 @@ import math
 import sqlite3
 from collections import defaultdict
 
-from netseer.src.engine.networks import stored
+from netseer.src.engine.networks import broadcast_prefix, stored
 from netseer.src.engine.scorer import device_bands
 
 MAX_EXTERNALS = 40               # outside sources drawn one by one; the rest become "other"
@@ -45,6 +46,14 @@ def build_map(conn: sqlite3.Connection, analysis_id: int) -> dict:
                               (analysis_id,)):
             for peer in json.loads(r["peers_json"] or "[]"):
                 pairs.append((min(r["ip"], peer), max(r["ip"], peer), 1, 0, 0))
+
+    def non_host(ip: str) -> bool:
+        addr = _addr(ip)
+        return addr is not None and (addr.is_multicast or addr.is_unspecified or str(addr) == "255.255.255.255"
+                                     or (addr.version == 4 and broadcast_prefix(str(addr)) is not None))
+
+    # Broadcast/multicast/unspecified peers aren't hosts; keep only the ones we know as devices.
+    pairs = [p for p in pairs if not any(non_host(ip) and ip not in devices for ip in p[:2])]
 
     def network_of(ip: str):
         addr = _addr(ip)

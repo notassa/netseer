@@ -5,6 +5,7 @@ Last updated: 2026-11-18
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task; details go in the Step log and decision sections below.
 
+- [2026-11-18] dump.md ideas 1–3: Alerts table shows 8 columns with Severity = Suricata priority as [1] High…[4] Info (also on the incident raw-alerts table; ET severity column and filter removed); network map leaves out broadcast, multicast and unspecified addresses that are not devices; Home shows the Analysis card first. 203 tests
 - [2026-11-18] Add caveman + ponytail style rules (`CLAUDE.md`, ponytail rules for workers in `AGENTS.md`)
 - [2026-11-18] Add orchestrator/worker workflow: Claude plans and reviews, DeepSeek workers (opencode) code (`CLAUDE.md`, new `AGENTS.md`); `dump.md` becomes an idea inbox reviewed against `docs/`; this dated change log
 - [2026-11-03] Commit the prototype to GitHub (`6030a05 Add NetSeer FYP2 prototype`)
@@ -200,4 +201,4 @@ python -m netseer.eval.acp_metrics <id> --rerun                 # Table 4.13 num
 | Processing time | ACP 3–6: 0.15 s for 1,349 alerts; whole analysis 137 s for 7,629 MB (55.8 MB/s) ("big") |
 | LLM seconds per explanation | 91 s mean (46–117 s, 5 incidents, `llama3.2:3b`, CPU, 4 threads, ~2,300-token prompt) |
 | Verified explanations | 4 / 5 (the fifth flagged correctly: band mismatch; measured before C3 change request 2) |
-| Tests passed | 202 / 202 |
+| Tests passed | 203 / 203 (2026-11-18) |
