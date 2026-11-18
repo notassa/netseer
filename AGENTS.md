@@ -2,6 +2,14 @@
 
 You are a worker. Claude Code is the orchestrator: it gives you one scoped coding task, then reviews your diff and runs the tests. Project background is in `CLAUDE.md` and `docs/CONCEPTS.md`; read only what the brief points to.
 
+## Ponytail: smallest complete change
+- Lazy about the solution, never about the change: finish every caller, test and fixture the task touches.
+- Reuse first: existing helper in this repo → stdlib → installed package → minimal new code. Never add a dependency.
+- No abstractions, options, config or "for later" code nobody asked for. Deletion beats addition. Keep the existing structure.
+- Comment only the why, in one line. A known limit gets `# shortcut: <limit>, <when to upgrade>`.
+- Never cut: validation at trust boundaries, error handling that prevents data loss, security, accessibility.
+- Replies short and plain: no filler.
+
 ## Do
 - Edit **only** the files named in the brief. If another file must change, stop and say which and why.
 - Use only functions, modules and settings that exist in this repo or in the installed packages (`.venv`). Check before you use them.

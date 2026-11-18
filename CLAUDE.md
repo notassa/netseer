@@ -9,6 +9,11 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
 4. `docs/progress.md`: where we are. Its **Change log** has one line per change: `[YYYY-MM-DD] change`, newest first.
 5. `dump.md`: the owner's idea inbox (see below).
 
+## Style: always caveman + ponytail
+- At session start, and whenever it applies, use the `caveman:caveman` skill (short, blunt replies, no filler) and the `anthropic-skills:ponytail` skill (smallest complete change, no unrequested extras, end with what was skipped + risks).
+- Never cut for brevity: evidence, numbers, risks, safety, anything the owner asked for.
+- Worker briefs follow the same rules; workers get them through the Ponytail section of `AGENTS.md`.
+
 ## Roles: Claude orchestrates, DeepSeek workers code
 - **Claude (orchestrator):** analyse, plan, split work into small tasks, write worker briefs, review every worker diff, run tests, update docs, commit and push. Claude may write code itself only for fixes too small to brief (a few lines) or when a worker failed twice.
 - **Workers:** DeepSeek models through opencode, one scoped coding task each. Their rules are in `AGENTS.md`.

@@ -5,6 +5,7 @@ Last updated: 2026-11-18
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task; details go in the Step log and decision sections below.
 
+- [2026-11-18] Add caveman + ponytail style rules (`CLAUDE.md`, ponytail rules for workers in `AGENTS.md`)
 - [2026-11-18] Add orchestrator/worker workflow: Claude plans and reviews, DeepSeek workers (opencode) code (`CLAUDE.md`, new `AGENTS.md`); `dump.md` becomes an idea inbox reviewed against `docs/`; this dated change log
 - [2026-11-03] Commit the prototype to GitHub (`6030a05 Add NetSeer FYP2 prototype`)
 - [2026-10-22 – 2026-11-03] C3 change requests 2–5: algorithm review, inside-LAN detection, upload checks, AI stop, map and alert-page changes (exact dates not recorded; see the decision sections below)
