@@ -46,6 +46,7 @@ def validate(conn: sqlite3.Connection, analysis_id: int, gt: list[dict], toleran
         by_pair[row["pair"]].append(i)
     covered: set[int] = set()
     matched_incidents: set[int] = set()
+    matched_by_attack: dict[int, set[int]] = defaultdict(set)
     groups = conn.execute(
         "SELECT ig.incident_id, g.src_ip, g.dest_ip, g.first_seen, g.last_seen FROM incident_groups ig "
         "JOIN alert_groups g ON g.id = ig.group_id WHERE g.analysis_id = ?", (analysis_id,))
@@ -56,17 +57,26 @@ def validate(conn: sqlite3.Connection, analysis_id: int, gt: list[dict], toleran
             if gt[i]["start"] <= t1 and gt[i]["end"] >= t0:
                 covered.add(i)
                 matched_incidents.add(g["incident_id"])
+                matched_by_attack[i].add(g["incident_id"])
     # Only ground truth inside the analysed time range can be found.
     lo, hi = conn.execute("SELECT MIN(ts), MAX(ts) FROM alerts WHERE analysis_id = ?", (analysis_id,)).fetchone()
     in_range = [i for i, r in enumerate(gt) if lo and r["end"] >= datetime.fromisoformat(lo).timestamp() - tolerance
                 and r["start"] <= datetime.fromisoformat(hi).timestamp() + tolerance]
     total, hit = Counter(gt[i]["category"] for i in in_range), Counter(gt[i]["category"] for i in covered)
     bands: dict[str, list[int]] = {b: [0, 0] for b in BANDS}
+    band_of: dict[int, str] = {}
     for r in conn.execute("SELECT id, band FROM incidents WHERE analysis_id = ?", (analysis_id,)):
+        band_of[r["id"]] = r["band"]
         if r["band"] in bands:
             bands[r["band"]][0 if r["id"] in matched_incidents else 1] += 1
+    suppressed = 0
+    for i in covered:
+        best = min((b for iid in matched_by_attack[i] if (b := band_of.get(iid)) in BANDS),
+                   key=BANDS.index, default=None)
+        if best in ("Low", "Note"):
+            suppressed += 1
     return {"in_range": len(in_range), "covered": len(covered), "categories": {c: (hit[c], total[c]) for c in total},
-            "bands": bands}
+            "bands": bands, "suppressed": suppressed}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -90,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Incidents per band (matching a labelled attack / not):")
     for band, (yes, no) in r["bands"].items():
         print(f"  {band:<9} {yes:>5} / {no}")
+    print(f"Covered but only Low/Note = suppressed (counts as missed): {r['suppressed']}")
     return 0
 
 

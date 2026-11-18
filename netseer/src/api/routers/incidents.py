@@ -24,7 +24,7 @@ RAW_ALERTS = 200
 def incident_rows(conn: sqlite3.Connection, analysis_id: int, where: str = "", args: tuple = (),
                   limit: int | None = None) -> list[dict]:
     """Incidents ordered by band then score (A5.3), with host lists decoded."""
-    sql = (f"SELECT * FROM incidents WHERE analysis_id = ?{where} ORDER BY {BAND_RANK}, score DESC, id"
+    sql = (f"SELECT * FROM incidents WHERE analysis_id = ?{where} ORDER BY {BAND_RANK}, score DESC, first_seen, id"
            + (f" LIMIT {int(limit)}" if limit else ""))
     return [dict(r) | {"src_ips": json.loads(r["src_ips_json"]), "dest_ips": json.loads(r["dest_ips_json"]),
                        "band_rank": BANDS.index(r["band"]) if r["band"] in BANDS else len(BANDS)}
@@ -103,6 +103,7 @@ def incident_detail(incident_id: int, request: Request, conn: sqlite3.Connection
         "inc": dict(row) | {"src_ips": json.loads(row["src_ips_json"]), "dest_ips": json.loads(row["dest_ips_json"])},
         "evidence": json.loads(row["evidence_json"] or "{}"),
         "factors": [(k, FACTOR_NAMES[k], factors[k]) for k in FACTOR_NAMES if k in factors],
+        "meta": factors.get("_meta"),
         "groups": groups,
         "timeline": [{"label": f"{g['signature'] or g['sid']} · {g['src_ip'] or 'unknown'} → {g['dest_ip'] or 'unknown'}",
                       "start": g["first_seen"], "end": g["last_seen"], "count": g["count"]} for g in groups],

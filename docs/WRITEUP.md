@@ -303,7 +303,7 @@ Updated after every change that moves a number. How each step was checked: `docs
 | Processing time | ACP 3–6: 0.15 s for 1,349 alerts; whole analysis 137 s for 7,629 MB (55.8 MB/s) ("big") |
 | LLM seconds per explanation | 91 s mean (46–117 s, 5 incidents, `llama3.2:3b`, CPU, 4 threads, ~2,300-token prompt) |
 | Verified explanations | 4 / 5 (the fifth flagged correctly: band mismatch; measured before C3 change request 2) |
-| Tests passed | 208 / 208 (2026-11-18) |
+| Tests passed | 213 / 213 (2026-11-18) |
 
 ---
 

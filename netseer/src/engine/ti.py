@@ -80,7 +80,7 @@ def enrich(conn: sqlite3.Connection, analysis_id: int, sleep=time.sleep) -> int:
     if not any(keys.values()):
         return 0
     ips: list[str] = []
-    for r in conn.execute("SELECT src_ips_json, dest_ips_json FROM incidents WHERE analysis_id = ? ORDER BY score DESC",
+    for r in conn.execute("SELECT src_ips_json, dest_ips_json FROM incidents WHERE analysis_id = ? ORDER BY score DESC, id",
                           (analysis_id,)):
         for ip in json.loads(r["src_ips_json"]) + json.loads(r["dest_ips_json"]):
             if ip not in ips and _public(ip) and not conn.execute(

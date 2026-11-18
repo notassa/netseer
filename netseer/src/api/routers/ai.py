@@ -65,9 +65,9 @@ def ai_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
     if incident_id.isdigit():
         inc = _incident(conn, int(incident_id))
     else:
-        inc = conn.execute("SELECT * FROM incidents WHERE analysis_id = ? ORDER BY score DESC LIMIT 1",
+        inc = conn.execute("SELECT * FROM incidents WHERE analysis_id = ? ORDER BY score DESC, first_seen, id LIMIT 1",
                            (ctx["selected"]["id"] if ctx["selected"] else -1,)).fetchone()
-    choices = conn.execute("SELECT id, title, band, score FROM incidents WHERE analysis_id = ? ORDER BY score DESC "
+    choices = conn.execute("SELECT id, title, band, score FROM incidents WHERE analysis_id = ? ORDER BY score DESC, first_seen, id "
                            "LIMIT ?", (inc["analysis_id"] if inc else -1, INCIDENT_CHOICES)).fetchall()
     result = None
     state = {"state": "none"}

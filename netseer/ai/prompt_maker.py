@@ -105,6 +105,9 @@ def build_evidence(conn: sqlite3.Connection, incident_id: int) -> dict:
             p.unknowns.append(f"{key} {name}: {f['why']}.")
         else:
             p.fact(f"Risk factor {key} {name} = {f['value']:.1f} of 9: {f['why']}.", "factor")
+    unconfirmed = factors.get("_meta", {}).get("data_quality", {}).get("unattributed_devices")
+    if unconfirmed:                          # TI not checked is already an L5 unknown
+        p.unknowns.append(f"Device type of {', '.join(unconfirmed)} not confirmed by the administrator.")
     ips = [(ip, "Source") for ip in json.loads(inc["src_ips_json"] or "[]")] + \
           [(ip, "Destination") for ip in json.loads(inc["dest_ips_json"] or "[]")]
     for ip, role in ips[:MAX_HOSTS]:
@@ -151,7 +154,7 @@ def build_analysis_evidence(conn: sqlite3.Connection, analysis_id: int) -> dict:
     if a is None:
         raise KeyError(analysis_id)
     net = network_health(conn, analysis_id)
-    incs = conn.execute("SELECT * FROM incidents WHERE analysis_id = ? AND band != 'Note' ORDER BY score DESC "
+    incs = conn.execute("SELECT * FROM incidents WHERE analysis_id = ? AND band != 'Note' ORDER BY score DESC, first_seen, id "
                         "LIMIT ?", (analysis_id, MAX_INCIDENTS)).fetchall()
     total = conn.execute("SELECT COUNT(*) FROM incidents WHERE analysis_id = ?", (analysis_id,)).fetchone()[0]
     n_dev = conn.execute("SELECT COUNT(*) FROM devices WHERE analysis_id = ?", (analysis_id,)).fetchone()[0]

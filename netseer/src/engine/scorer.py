@@ -19,6 +19,8 @@ from netseer.src.engine.constants import (BANDS, DAMPING_P, DEVICE_TYPE, DEVICE_
                                           I3_CLASSTYPE, I3_OTHER, L1_PRIORITY, L1_SIG_SEVERITY, L3_RULE, L4_DIRECTION,
                                           LEVEL_CUTS, MATRIX, RISK_CUTS)
 
+MODEL_VERSION = "A5-1.0"        # CONCEPTS A5 risk model; bump when A5 rules change
+
 I3_BY_CLASSTYPE = {ct: value for value, names in I3_CLASSTYPE.items() for ct in names}
 RULE_WHY = {
     "single": "one alert group, no correlation rule fired",
@@ -184,6 +186,10 @@ def _factors(inc: sqlite3.Row, alerts: list[sqlite3.Row], devices: dict[str, sql
     worst = max(alerts, key=lambda a: i3(a["classtype"]))
     f["I3"] = {"value": i3(worst["classtype"]), "evidence": {"classtype": worst["classtype"], "alert_id": worst["id"]},
                "why": worst["classtype"] or "classtype unknown"}
+    f["_meta"] = {"model_version": MODEL_VERSION,
+                  "data_quality": {"unattributed_devices": sorted(d["ip"] for d in involved if not d["attributed"]),
+                                   "no_internal_device": not involved,
+                                   "ti_checked": any(ip in ti_results for ip in ips)}}
     return f
 
 

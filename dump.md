@@ -4,10 +4,12 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 - Write new ideas under **Inbox**, one bullet each. Rough wording is fine.
 - Claude reviews each idea against `docs/` (new / conflicts / duplicate / already done) and waits for your go-ahead before building it.
 - Reviewed ideas move to **Reviewed** as `[YYYY-MM-DD] idea → verdict → commit`.
+- Prompt "read dump.md #Inbox"
 
 ## Inbox
 
 ## Reviewed
+- [2026-11-18] Review docs/netseer-risk-scoring-implementation-spec.md vs current model → not adopted as a whole (would undo A5 decisions; weaker evidence); adopted its audit fields, stable order, evaluation → CONCEPTS A5.3/A5.4
 - [2026-11-18] Don't burn tokens; smarter route when stuck in a loop → new; done → CLAUDE.md "Token economy and loop guard", AGENTS.md "Save tokens"
 - [2026-11-18] maclookup.app API when the local OUI lookup returns unknown → new; done, setting on by default, OUI only, cached → CONCEPTS A3/A9/A15
 - [2026-11-18] progress.md = change log only → conflicted with CLAUDE.md/KICKOFF/WRITEUP pointers; done: environment → brief §3a, Tables 4.12/4.13 + demo commands → WRITEUP §8/§10, build record + decisions → RAD-PLAN; pointers updated

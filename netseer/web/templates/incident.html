@@ -60,6 +60,7 @@
   </tbody>
 </table>
 </div>
+{% if meta %}<p class="muted">Model {{ meta.model_version }}{% if meta.data_quality.unattributed_devices %} · device type not confirmed: {{ meta.data_quality.unattributed_devices | join(', ') }}{% endif %}{% if meta.data_quality.no_internal_device %} · no internal device involved{% endif %}{% if not meta.data_quality.ti_checked %} · threat intelligence not checked{% endif %}</p>{% endif %}
 
 <h2>Timeline</h2>
 <div class="card">

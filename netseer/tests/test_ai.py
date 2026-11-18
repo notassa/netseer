@@ -56,6 +56,16 @@ def test_evidence_package_has_ids_factors_hosts_and_unknowns(incident):
     assert inc["band"] in system and '"E1"' in user
 
 
+def test_unattributed_device_lists_an_unknown(incident):
+    _, conn, _ = incident
+    conn.execute("UPDATE devices SET attributed = 0 WHERE ip = ?", (WORKSTATION,))
+    run_acp(conn, 1)
+    inc = next(r for r in conn.execute("SELECT * FROM incidents").fetchall()
+               if WORKSTATION in json.loads(r["factors_json"])["_meta"]["data_quality"]["unattributed_devices"])
+    ev = prompt_maker.build_evidence(conn, inc["id"])
+    assert any("not confirmed by the administrator" in u for u in ev["unknowns"])
+
+
 def test_clean_output_passes(incident):
     _, conn, inc = incident
     ev = prompt_maker.build_evidence(conn, inc["id"])

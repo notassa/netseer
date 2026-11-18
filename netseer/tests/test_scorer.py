@@ -95,7 +95,7 @@ def test_worked_example_end_to_end(conn):  # noqa: F811
     assert (round(a["likelihood"], 2), round(a["impact"], 2), a["band"], round(a["score"], 2)) == (5.84, 3.0, "Medium", 2.16)
     assert (round(b["likelihood"], 2), round(b["impact"], 2), b["band"], round(b["score"], 2)) == (5.34, 7.5, "High", 4.94)
     fa = json.loads(a["factors_json"])
-    values = {k: fa[k]["value"] for k in fa}
+    values = {k: fa[k]["value"] for k in fa if k != "_meta"}
     assert round(values.pop("L2"), 2) == 5.36
     assert values == {"L1": 4, "L3": 5, "L4": 9, "L5": None, "I1": 9, "I2": 9, "I3": 3}
     assert fa["I1"]["evidence"]["device"] == SERVER and fa["L2"]["why"] == "60 alerts"
@@ -106,6 +106,21 @@ def test_worked_example_end_to_end(conn):  # noqa: F811
     assert [d["ip"] for d in net["top_devices"]] == [WORKSTATION, SERVER]
     assert [i["id"] for i in net["top_incidents"]] == [b["id"], a["id"]]
     assert [i["points"] for i in net["top_incidents"]] == [32, 6]       # shares of the 38-point drop
+
+
+def test_factor_meta_model_version_data_quality_and_health(conn):  # noqa: F811
+    worked_example(conn)
+    conn.execute("UPDATE devices SET attributed = 0 WHERE ip = ?", (WORKSTATION,))
+    run_acp(conn, 1)
+    rows = conn.execute("SELECT * FROM incidents").fetchall()
+    for r in rows:
+        meta = json.loads(r["factors_json"])["_meta"]
+        assert meta["model_version"] == "A5-1.0"
+        assert set(meta["data_quality"]) == {"unattributed_devices", "no_internal_device", "ti_checked"}
+    b = conn.execute("SELECT * FROM incidents WHERE rule = 'single'").fetchone()
+    assert WORKSTATION in json.loads(b["factors_json"])["_meta"]["data_quality"]["unattributed_devices"]
+    net = scorer.network_health(conn, 1)
+    assert (round(net["p_network"], 3), net["health"]) == (0.381, 62)
 
 
 def test_incidents_without_devices_still_lower_health(conn):  # noqa: F811
