@@ -9,6 +9,8 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-23] Left panel: Log out always visible → partly done before; only links scroll now → CONCEPTS A10 → a7f0e76
+- [2026-11-23] Home: Traffic Volume, amount per bin, input + wheel + Reset, swap with Top Incidents → reversed the per-second choice; owner set a 5 s minimum, new `traffic_stats` → CONCEPTS A10, brief §5/§9 → a7f0e76
 - [2026-11-23] Playwright usable by orchestrator and workers → new; done, cleaned DB copy via `netseer.eval.browser_env`, tested from a real worker → CLAUDE.md, AGENTS.md → 8547369
 - [2026-11-23] Orchestration token rules → partly adopted: same-session fixes for rejected diffs, 8-read budget, no file dumps; shared plan file rejected (conflicts with copied constants in briefs), rest already covered → CLAUDE.md, AGENTS.md → 8547369
 - [2026-11-23] Site runs via `./startnetseer.sh` on Tailscale → new note; done; Tailscale vs W9 UFW LAN-only left for the owner → CLAUDE.md, RAD-PLAN decisions → 8547369
