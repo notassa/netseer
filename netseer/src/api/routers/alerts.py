@@ -19,7 +19,7 @@ router = APIRouter(dependencies=[Depends(require_user)])
 DIRECTIONS = ("ext->int", "int->ext", "int->int", "ext->ext")
 TICKS = {"priority": ("1", "2", "3", "4"), "direction": DIRECTIONS, "classtype": None}
 FILTER_KEYS = ("q", "src_ip", "dest_ip", "sid", *TICKS)
-ALERT_SORT = {"time": "ts", "src": "src_ip", "dest": "dest_ip", "proto": "proto", "signature": "signature",
+ALERT_SORT = {"id": "id", "time": "ts", "src": "src_ip", "dest": "dest_ip", "proto": "proto", "signature": "signature",
               "class": "classtype", "severity": "priority", "direction": "direction"}
 
 

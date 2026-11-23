@@ -1,6 +1,6 @@
 # NetSeer — progress
 
-Last updated: 2026-11-18
+Last updated: 2026-11-23
 
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).

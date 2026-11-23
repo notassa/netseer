@@ -179,6 +179,6 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
     assert "[1] High" in page
     head = page.split('id="alerts-table"', 1)[1].split("</thead>", 1)[0]
     assert re.findall(r'data-key="([^"]+)"', head) == \
-        ["time", "severity", "signature", "class", "direction", "src", "dest", "proto"]
+        ["id", "time", "severity", "signature", "class", "direction", "src", "dest", "proto"]
     heads = set(re.findall(r"<th[^>]*>([^<{]+)</th>", page))
     assert heads and heads <= set(COLUMN_HELP), heads - set(COLUMN_HELP)     # every alerts-page column is explained

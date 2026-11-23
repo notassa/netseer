@@ -23,10 +23,11 @@
 </form>
 <div class="table-wrap">
 <table class="data sortable" id="incidents-table">
-  <thead><tr><th data-key="band">Band</th><th data-key="score">Score</th><th data-key="title">Title</th><th data-key="rule">Rule</th><th data-key="hosts">Hosts</th><th data-key="span">Span (UTC)</th><th data-key="alerts">Alerts</th></tr></thead>
+  <thead><tr><th data-key="id">Incident ID</th><th data-key="band">Band</th><th data-key="score">Score</th><th data-key="title">Title</th><th data-key="rule">Rule</th><th data-key="hosts">Hosts</th><th data-key="span">Span (UTC)</th><th data-key="alerts">Alerts</th></tr></thead>
   <tbody>
   {% for i in rows %}
   <tr class="clickable" data-href="/incidents/{{ i.id }}">
+    <td>{{ i.id }}</td>
     <td data-sort="{{ i.band_rank }}">{{ band_chip(i.band) }}</td>
     <td data-sort="{{ '%.3f' | format(i.score or 0) }}">{{ '%.2f' | format(i.score or 0) }}</td>
     <td><a href="/incidents/{{ i.id }}">{{ i.title }}</a></td>
@@ -37,7 +38,7 @@
     <td>{{ i.n_alerts }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="7" class="muted">{% if total %}No incidents match.{% else %}No possible incidents in this analysis.{% endif %}</td></tr>
+  <tr><td colspan="8" class="muted">{% if total %}No incidents match.{% else %}No possible incidents in this analysis.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -45,6 +45,7 @@ templates.env.filters["status_class"] = lambda s: STATUS_CLASS.get(s, "")
 # Tooltip for every table column head with this text (layout.html sets it on <th> elements without a title).
 COLUMN_HELP = {
     "Actions": "What you can do with this row",
+    "Alert ID": "Alert's database ID (alerts.id); a full re-analysis assigns new IDs",
     "Alerts": "Number of Suricata (or NetSeer scan) alerts counted here",
     "Attacker (source)": "Address that sent the traffic that raised the alerts, as Suricata saw it",
     "Victim (destination)": "Address that received that traffic, as Suricata saw it",
@@ -71,6 +72,7 @@ COLUMN_HELP = {
     "Hostname": "Name from DHCP, DNS, TLS SNI or HTTP host (remembered across analyses)",
     "Hosts": "Addresses involved",
     "Incident": "Possible incident the row belongs to",
+    "Incident ID": "Possible incident's database ID (incidents.id); a full re-analysis assigns new IDs",
     "IP": "IP address",
     "Interface": "Network card name on this machine",
     "State": "Whether the cable has a link, and the kernel's operational state",

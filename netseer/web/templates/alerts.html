@@ -78,10 +78,11 @@
 </details>
 <div class="table-wrap">
 <table class="data sortable" id="alerts-table" data-server-sort>
-  <thead><tr><th data-key="time">Time (UTC)</th><th data-key="severity">Severity</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="direction">Direction</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th></tr></thead>
+  <thead><tr><th data-key="id">Alert ID</th><th data-key="time">Time (UTC)</th><th data-key="severity">Severity</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="direction">Direction</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th></tr></thead>
   <tbody>
   {% for a in rows %}
   <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
+    <td>{{ a.id }}</td>
     <td>{{ a.ts[:19] | replace('T', ' ') if a.ts else '' }}</td>
     <td>{{ unk(a.priority | severity) }}</td>
     <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
@@ -92,7 +93,7 @@
     <td>{{ a.proto or '' }}{% if a.app_proto %}/{{ a.app_proto }}{% endif %}</td>
   </tr>
   {% else %}
-  <tr><td colspan="8" class="muted">No alerts match.</td></tr>
+  <tr><td colspan="9" class="muted">No alerts match.</td></tr>
   {% endfor %}
   </tbody>
 </table>

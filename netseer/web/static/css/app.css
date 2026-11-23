@@ -61,6 +61,7 @@ code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monosp
 .sidebar {
   width: 210px; flex-shrink: 0; background: var(--sidebar); color: var(--sidebar-text);
   display: flex; flex-direction: column; padding: 1rem 0;
+  position: sticky; top: 0; height: 100vh; box-sizing: border-box;
 }
 .brand { font-weight: 700; font-size: 1.2rem; padding: 0 1.25rem 1rem; color: #fff; letter-spacing: .02em; }
 .brand span { color: var(--accent); }
@@ -73,7 +74,7 @@ code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monosp
 .nav .later { opacity: .55; }
 .nav a { display: flex; align-items: center; gap: .7rem; white-space: nowrap; }
 .icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.sidebar { transition: width .2s; overflow: hidden; }
+.sidebar { transition: width .2s; overflow: hidden auto; }
 .brand-mini { display: none; }
 .logout { display: inline-flex; align-items: center; gap: .4rem; }
 .session-timer { display: inline-flex; align-items: center; gap: .3rem; font-variant-numeric: tabular-nums; color: var(--muted); }
