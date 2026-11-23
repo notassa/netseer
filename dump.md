@@ -8,10 +8,12 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 
 ## Inbox
 - make left sidebar unaffect by the site scroll (stay in position).
+- reorganize Settings page into proper ui/ux structure.
+- make the ui/ux appears properly in mobile version as well.
 
 ## Reviewed
-- [2026-11-23] Reorganize Settings → new layout; grouped side menu and config sections → brief §9, CONCEPTS A10 → f93cc03
-- [2026-11-23] Proper mobile UI → new; slide-in menu, compact topbar, 40 px controls → brief §9 → f93cc03
+- [2026-11-23] Reorganize Settings → done in f93cc03, reverted by owner with the unslop UI, back in Inbox → 83c7255
+- [2026-11-23] Proper mobile UI → done in f93cc03, reverted by owner with the unslop UI, back in Inbox → 83c7255
 - [2026-11-23] All graphs broken → new bug from stale cached app.js; fixed with no-cache on static files → 92f8c77
 - [2026-11-23] Alerts severity without [x] → conflicted with CONCEPTS A5.5, brief §9; done everywhere → CONCEPTS, brief §9, WRITEUP → 92f8c77
 - [2026-11-23] Use /unslop for UI/UX after logic → new; adopted with limits (polish only, audit first, protected risk and wording), pinned 620163e → CLAUDE.md, AGENTS.md → c6efa5d
