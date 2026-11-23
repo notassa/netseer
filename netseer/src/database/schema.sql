@@ -180,14 +180,17 @@ CREATE TABLE IF NOT EXISTS packet_stats (
     minute       TEXT NOT NULL,      -- YYYY-MM-DDTHH:MM (UTC); flows are spread over their duration
     packets      INTEGER NOT NULL DEFAULT 0,
     bytes        INTEGER NOT NULL DEFAULT 0,
-    ii_packets   INTEGER NOT NULL DEFAULT 0,   -- INT>INT
-    ii_bytes     INTEGER NOT NULL DEFAULT 0,
-    ie_packets   INTEGER NOT NULL DEFAULT 0,   -- INT>EXT (egress)
-    ie_bytes     INTEGER NOT NULL DEFAULT 0,
-    ei_packets   INTEGER NOT NULL DEFAULT 0,   -- EXT>INT (ingress)
-    ei_bytes     INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (analysis_id, minute)
 );
+
+CREATE TABLE IF NOT EXISTS traffic_stats (
+    analysis_id  INTEGER NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+    second       INTEGER NOT NULL,   -- UTC epoch seconds, multiple of 5; flows are spread over their duration
+    ii_packets INTEGER NOT NULL DEFAULT 0, ii_bytes INTEGER NOT NULL DEFAULT 0,   -- INT>INT
+    ie_packets INTEGER NOT NULL DEFAULT 0, ie_bytes INTEGER NOT NULL DEFAULT 0,   -- INT>EXT (egress)
+    ei_packets INTEGER NOT NULL DEFAULT 0, ei_bytes INTEGER NOT NULL DEFAULT 0,   -- EXT>INT (ingress)
+    PRIMARY KEY (analysis_id, second)
+) WITHOUT ROWID;
 
 -- Every IP outside the LAN CIDRs seen in an analysis (Devices → External sources).
 CREATE TABLE IF NOT EXISTS external_hosts (

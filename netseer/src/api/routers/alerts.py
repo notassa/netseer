@@ -112,28 +112,47 @@ def packet_series(conn: sqlite3.Connection, analysis_id: int, minutes: int) -> l
     return [{"t": t, "packets": n} for t, n in _binned(((r[0], r[1]) for r in rows), minutes)]
 
 
-TRAFFIC_BINS = (5, 10, 30, 60)
+TRAFFIC_MIN_S = 5
+TRAFFIC_MAX_S = 3600
+TRAFFIC_DEFAULT_POINTS = 200
+TRAFFIC_MAX_POINTS = 2500
+TRAFFIC_DEFAULT_BINS = (5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600)
 
 
-def traffic_series(conn: sqlite3.Connection, analysis_id: int, minutes: int) -> dict:
-    """Traffic per `minutes`-wide bin split by direction (ii, ie, ei) for the Home Traffic Rate chart."""
-    cols = ("ii_packets", "ii_bytes", "ie_packets", "ie_bytes", "ei_packets", "ei_bytes")
+def traffic_series(conn: sqlite3.Connection, analysis_id: int, seconds: int | None = None) -> dict:
+    """Traffic volume per `seconds`-wide bin split by direction (ii, ie, ei) for the Home chart."""
+    lo, hi = conn.execute("SELECT MIN(second), MAX(second) FROM traffic_stats WHERE analysis_id = ?",
+                          (analysis_id,)).fetchone()
+    if lo is None:
+        needs = conn.execute("SELECT 1 FROM packet_stats WHERE analysis_id = ? LIMIT 1",
+                             (analysis_id,)).fetchone() is not None
+        return {"seconds": 60, "default_seconds": 60, "raised": False, "points": [], "needs_reanalysis": needs}
+    span = hi - lo + TRAFFIC_MIN_S
+    default = next((b for b in TRAFFIC_DEFAULT_BINS if span / b <= TRAFFIC_DEFAULT_POINTS), TRAFFIC_MAX_S)
+    requested = seconds or default
+    floor = TRAFFIC_MIN_S
+    while span / floor > TRAFFIC_MAX_POINTS:
+        floor += TRAFFIC_MIN_S
+    used = max(requested, floor)
+    raised = used != requested
     rows = conn.execute(
-        "SELECT minute, ii_packets, ii_bytes, ie_packets, ie_bytes, ei_packets, ei_bytes "
-        "FROM packet_stats WHERE analysis_id = ?", (analysis_id,)).fetchall()
-    binned = [_binned(((r[0], r[col]) for r in rows), minutes) for col in cols]
-    points = [{"t": t, "ii_packets": binned[0][j][1], "ii_bytes": binned[1][j][1],
-               "ie_packets": binned[2][j][1], "ie_bytes": binned[3][j][1],
-               "ei_packets": binned[4][j][1], "ei_bytes": binned[5][j][1]}
-              for j, (t, _) in enumerate(binned[0])]
-    return {"minutes": minutes,
-            "has_split": any(sum(r[col] for r in rows) > 0 for col in cols),
-            "points": points}
-
-
-def default_traffic_bin(conn: sqlite3.Connection, analysis_id: int) -> int:
-    """First Home Traffic Rate bin width at or above the default Alerts bin, else 60."""
-    return next((m for m in TRAFFIC_BINS if m >= default_bin_minutes(conn, analysis_id)), 60)
+        "SELECT second / ? * ? AS t, SUM(ii_packets) AS ii_packets, SUM(ii_bytes) AS ii_bytes, "
+        "SUM(ie_packets) AS ie_packets, SUM(ie_bytes) AS ie_bytes, SUM(ei_packets) AS ei_packets, "
+        "SUM(ei_bytes) AS ei_bytes FROM traffic_stats WHERE analysis_id = ? GROUP BY t ORDER BY t",
+        (used, used, analysis_id)).fetchall()
+    by_t = {r["t"]: r for r in rows}
+    points = []
+    t = lo // used * used
+    hi_bin = hi // used * used
+    while t <= hi_bin:
+        r = by_t.get(t)
+        points.append({"t": datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                       "ii_packets": r["ii_packets"] if r else 0, "ii_bytes": r["ii_bytes"] if r else 0,
+                       "ie_packets": r["ie_packets"] if r else 0, "ie_bytes": r["ie_bytes"] if r else 0,
+                       "ei_packets": r["ei_packets"] if r else 0, "ei_bytes": r["ei_bytes"] if r else 0})
+        t += used
+    return {"seconds": used, "default_seconds": default, "raised": raised, "points": points,
+            "needs_reanalysis": False}
 
 
 def alert_series(conn: sqlite3.Connection, analysis_id: int, minutes: int) -> list[dict]:
@@ -168,11 +187,12 @@ def packets_api(analysis_id: int, minutes: int = Query(60, ge=1, le=1440), conn:
 
 
 @router.get("/api/analyses/{analysis_id}/traffic")
-def traffic_api(analysis_id: int, minutes: int = Query(60), conn: sqlite3.Connection = Depends(get_db)):
-    """Traffic per x minutes split by direction for the Home Traffic Rate chart."""
-    if minutes not in TRAFFIC_BINS:
-        raise HTTPException(status_code=400, detail="minutes must be one of 5, 10, 30, 60.")
-    return traffic_series(conn, analysis_id, minutes)
+def traffic_api(analysis_id: int, seconds: int | None = Query(None, ge=TRAFFIC_MIN_S, le=TRAFFIC_MAX_S),
+                conn: sqlite3.Connection = Depends(get_db)):
+    """Traffic volume per x seconds split by direction for the Home Traffic Volume chart."""
+    if seconds is not None and seconds % TRAFFIC_MIN_S:
+        raise HTTPException(status_code=400, detail="seconds must be a multiple of 5.")
+    return traffic_series(conn, analysis_id, seconds)
 
 
 @router.get("/api/analyses/{analysis_id}/alert-series")

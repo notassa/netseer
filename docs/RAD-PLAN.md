@@ -126,6 +126,7 @@ One row per brief §10 step or change request, with the evidence that its Check 
 | dump.md ideas (2026-11-23): Alert ID, Incident ID, fixed left panel | Done | ✅ `pytest netseer/tests`: 213 passed; IDs show the existing primary keys, no schema change |
 | dump.md ideas (2026-11-23): Traffic Source, AI prompt, Traffic Rate, Data Representation | Done | ✅ `pytest netseer/tests`: 223 passed; Playwright Chromium on a DB copy: 27/27 checks, no console errors; migration kept all 118 `packet_stats` rows. Not exercised: a real upload or live capture through the new card. `realnetwork`: 43.2% of packets classified, the rest is global IPv6 outside the LAN CIDRs |
 | dump.md ideas (2026-11-23): worker Playwright, token rules, startnetseer note, RAD review | Done | ✅ `browser_env` smoke check from Claude and from a real opencode worker: 7 pages 200, 0 console errors, cleaned DB copy; `docs/feedback-log.md` created with no sessions logged |
+| dump.md ideas (2026-11-23): Traffic Volume, 5 s table, card swap, pinned Log out | Done | ✅ `pytest netseer/tests`: 227 passed; Playwright on a cleaned DB copy: 25/25 checks, no console errors; UNSW logger 38.0 s → 39.7 s, 1,317 rows, split packets and bytes equal `packet_stats` |
 
 ## Decisions to confirm at the demo
 Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belong in CONCEPTS.md; remove them here once confirmed.

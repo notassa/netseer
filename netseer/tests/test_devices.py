@@ -187,15 +187,36 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
 
 def test_traffic_api_bin_validation(analysed):
     client, _ = analysed
-    assert client.get("/api/analyses/1/traffic?minutes=7").status_code == 400
-    data = client.get("/api/analyses/1/traffic?minutes=5").json()
-    assert data["has_split"] is True and data["points"]
+    assert client.get("/api/analyses/1/traffic?seconds=7").status_code == 400
+    assert client.get("/api/analyses/1/traffic?seconds=4").status_code == 422
+    data = client.get("/api/analyses/1/traffic?seconds=5").json()
+    assert data["points"]
+    assert "default_seconds" in client.get("/api/analyses/1/traffic").json()
 
 
-def test_home_shows_traffic_rate_not_alert_trend(analysed):
+def test_home_shows_traffic_volume_not_alert_trend(analysed):
     client, _ = analysed
     page = client.get("/").text
-    assert "Traffic Rate" in page and "Alert trend" not in page
+    assert "Traffic Volume" in page
+    assert "Traffic Rate" not in page
+    assert "Alert trend" not in page
+
+
+def test_traffic_series_raised_and_needs_reanalysis(tmp_path):
+    from netseer.src.api.routers.alerts import traffic_series
+    path = tmp_path / "t.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    lo, hi = 1000000, 1000000 + 2500 * 5          # 2501 buckets of 5 s
+    for second in (lo, hi):
+        conn.execute("INSERT INTO traffic_stats(analysis_id, second) VALUES (1, ?)", (second,))
+    series = traffic_series(conn, 1, 5)
+    assert series["raised"] is True and len(series["points"]) <= 2500
+    conn.execute("DELETE FROM traffic_stats")
+    conn.execute("INSERT INTO packet_stats(analysis_id, minute, packets, bytes) VALUES (1, '2026-10-21T10:00', 1, 1)")
+    assert traffic_series(conn, 1)["needs_reanalysis"] is True
+    conn.close()
 
 
 def test_data_unit_setting_persists_and_invalid_refused(analysed):

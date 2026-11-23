@@ -490,8 +490,8 @@ def _clear_results(conn: sqlite3.Connection, analysis_id: int, commit: bool = Tr
     """Delete everything an analysis run produced (its captures, files and settings stay)."""
     if commit:
         conn.execute("BEGIN")
-    for table in ("incidents", "alert_groups", "alerts", "devices", "packet_stats", "external_hosts", "analysis_info",
-                  "host_links"):
+    for table in ("incidents", "alert_groups", "alerts", "devices", "packet_stats", "traffic_stats",
+                  "external_hosts", "analysis_info", "host_links"):
         conn.execute(f"DELETE FROM {table} WHERE analysis_id = ?", (analysis_id,))
     conn.execute("UPDATE analyses SET n_events = 0, n_alerts = 0 WHERE id = ?", (analysis_id,))
     if commit:

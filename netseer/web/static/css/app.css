@@ -74,7 +74,9 @@ code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monosp
 .nav .later { opacity: .55; }
 .nav a { display: flex; align-items: center; gap: .7rem; white-space: nowrap; }
 .icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.sidebar { transition: width .2s; overflow: hidden auto; }
+.sidebar { transition: width .2s; overflow: hidden; }
+.sidebar > .brand, .sidebar-foot { flex-shrink: 0; }
+.nav { flex: 1; min-height: 0; overflow: hidden auto; scrollbar-width: thin; }   /* only the links scroll, Log out stays */
 .brand-mini { display: none; }
 .logout { display: inline-flex; align-items: center; gap: .4rem; }
 .session-timer { display: inline-flex; align-items: center; gap: .3rem; font-variant-numeric: tabular-nums; color: var(--muted); }

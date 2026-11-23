@@ -101,12 +101,13 @@ def test_packet_stats_split_by_direction(tmp_path):
     logger.process_eve_file(conn, 1, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
     row = conn.execute("SELECT * FROM packet_stats WHERE minute = '2026-10-21T10:00'").fetchone()
     assert (row["packets"], row["bytes"]) == (17, 1700)
-    assert (row["ii_packets"], row["ii_bytes"]) == (5, 500)
-    assert (row["ie_packets"], row["ie_bytes"]) == (3, 300)
-    assert (row["ei_packets"], row["ei_bytes"]) == (2, 200)
+    t = conn.execute("SELECT * FROM traffic_stats").fetchone()
+    assert (t["ii_packets"], t["ii_bytes"]) == (5, 500)
+    assert (t["ie_packets"], t["ie_bytes"]) == (3, 300)
+    assert (t["ei_packets"], t["ei_bytes"]) == (2, 200)
 
 
-def test_migration_adds_packet_stats_direction_columns(tmp_path):
+def test_migration_adds_traffic_stats_and_keeps_packet_stats(tmp_path):
     path = tmp_path / "m.db"
     conn = db.connect(path)
     conn.execute("CREATE TABLE packet_stats (analysis_id INTEGER NOT NULL, minute TEXT NOT NULL, "
@@ -116,9 +117,8 @@ def test_migration_adds_packet_stats_direction_columns(tmp_path):
     conn.close()
     db.init_db(path)
     conn = db.connect(path)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(packet_stats)")}
-    for col in ("ii_packets", "ii_bytes", "ie_packets", "ie_bytes", "ei_packets", "ei_bytes"):
-        assert col in cols
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "traffic_stats" in tables
     row = conn.execute("SELECT * FROM packet_stats").fetchone()
     assert (row["packets"], row["bytes"]) == (5, 500)
     conn.close()
@@ -169,6 +169,15 @@ def test_spread_minutes_keeps_totals():
     assert sum(p[1] for p in parts) == 10 and sum(p[2] for p in parts) == 1001
     assert logger.spread_minutes("2025-10-09T08:53:40+00:00", "2025-10-09T08:53:10+00:00", 4, 4) == \
         [("2025-10-09T08:53", 4, 4)]
+
+
+def test_spread_seconds_keeps_totals():
+    parts = logger.spread_seconds("2025-10-09T08:53:40+00:00", "2025-10-09T08:53:52+00:00", 12, 1201)
+    assert len(parts) >= 3
+    assert all(t % 5 == 0 for t, _, _ in parts)
+    assert sum(p[1] for p in parts) == 12 and sum(p[2] for p in parts) == 1201
+    clamped = logger.spread_seconds("2025-10-09T08:53:40+00:00", "2025-10-09T08:53:30+00:00", 4, 4)
+    assert len(clamped) == 1 and clamped[0][1] == 4 and clamped[0][2] == 4
 
 
 @pytest.mark.parametrize("minutes,expected", [

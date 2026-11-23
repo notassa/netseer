@@ -25,6 +25,7 @@ NULL_IPS = {"0.0.0.0", "255.255.255.255"}
 SCAN_MIN_PORTS = 50            # probed ports on one host that make a port scan (NetSeer's own check, CONCEPTS A3)
 SCAN_PROBE_PKTS = 3            # a TCP flow with at most this many packets to the server is a probe
 SCAN_SID = 9000001
+TRAFFIC_BUCKET_S = 5           # traffic_stats bucket width in seconds
 
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
@@ -109,6 +110,17 @@ def spread_minutes(start: str, end: str, packets: int, nbytes: int) -> list[tupl
             for i in range(n)]
 
 
+def spread_seconds(start: str, end: str, packets: int, nbytes: int,
+                   width: int = TRAFFIC_BUCKET_S) -> list[tuple[int, int, int]]:
+    """Split a flow's packets/bytes evenly over UTC epoch `width`-second buckets (remainder to the first)."""
+    t0 = int(datetime.fromisoformat(start).timestamp()) // width * width
+    t1 = max(int(datetime.fromisoformat(end).timestamp()) // width * width, t0)
+    n = (t1 - t0) // width + 1
+    return [(t0 + i * width,
+             packets // n + (packets % n if i == 0 else 0), nbytes // n + (nbytes % n if i == 0 else 0))
+            for i in range(n)]
+
+
 def _first(meta: dict[str, Any], key: str) -> str | None:
     values = meta.get(key) or []
     return values[0] if values else None
@@ -187,6 +199,7 @@ class EveLogger:
     _mac_hostname: dict[str, str] = field(default_factory=dict)
     _mac_ip: dict[str, str] = field(default_factory=dict)
     _packets: dict[str, list[int]] = field(default_factory=dict)
+    _traffic: dict[int, list[int]] = field(default_factory=dict)
     _externals: dict[str, _External] = field(default_factory=dict)
     _dns_names: dict[str, str] = field(default_factory=dict)     # IP → name, from DNS answers
     _probes: dict[tuple[str, str], list] = field(default_factory=dict)   # (src, dest) → [first start, probed ports]
@@ -308,7 +321,7 @@ class EveLogger:
             nbytes = int(flow.get("bytes_toserver") or 0) + int(flow.get("bytes_toclient") or 0)
             end = to_utc(flow.get("end")) or start
             for minute, p, b in spread_minutes(start, end, packets, nbytes):
-                bucket = self._packets.setdefault(minute, [0] * 8)
+                bucket = self._packets.setdefault(minute, [0] * 2)
                 bucket[0] += p
                 bucket[1] += b
             src, dest = event.get("src_ip"), event.get("dest_ip")
@@ -318,13 +331,13 @@ class EveLogger:
                 if not (p or b):
                     continue
                 kind = (_on_lan(frm, self.nets), _on_lan(to, self.nets))
-                idx = 2 if kind == (True, True) else 4 if kind == (True, False) else 6 if kind == (False, True) else None
+                idx = 0 if kind == (True, True) else 2 if kind == (True, False) else 4 if kind == (False, True) else None
                 if idx is None:
                     continue
-                for minute, mp, mb in spread_minutes(start, end, p, b):
-                    bucket = self._packets.setdefault(minute, [0] * 8)
-                    bucket[idx] += mp
-                    bucket[idx + 1] += mb
+                for second, sp, sb in spread_seconds(start, end, p, b):
+                    bucket = self._traffic.setdefault(second, [0] * 6)
+                    bucket[idx] += sp
+                    bucket[idx + 1] += sb
         server = self._host(event.get("dest_ip"))
         if server is None:
             return
@@ -397,16 +410,23 @@ class EveLogger:
             mac = host.macs.most_common(1)[0][0] if host.macs else None
             self._upsert_device(conn, ip, host, mac)
         for minute, bucket in self._packets.items():
-            packets, nbytes, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b = bucket
+            packets, nbytes = bucket
             conn.execute(
-                "INSERT INTO packet_stats(analysis_id, minute, packets, bytes, ii_packets, ii_bytes, ie_packets, "
-                "ie_bytes, ei_packets, ei_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "INSERT INTO packet_stats(analysis_id, minute, packets, bytes) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(analysis_id, minute) DO UPDATE SET packets = packets + excluded.packets, "
-                "bytes = bytes + excluded.bytes, ii_packets = ii_packets + excluded.ii_packets, "
+                "bytes = bytes + excluded.bytes",
+                (self.analysis_id, minute, packets, nbytes),
+            )
+        for second, bucket in self._traffic.items():
+            ii_p, ii_b, ie_p, ie_b, ei_p, ei_b = bucket
+            conn.execute(
+                "INSERT INTO traffic_stats(analysis_id, second, ii_packets, ii_bytes, ie_packets, ie_bytes, "
+                "ei_packets, ei_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(analysis_id, second) DO UPDATE SET ii_packets = ii_packets + excluded.ii_packets, "
                 "ii_bytes = ii_bytes + excluded.ii_bytes, ie_packets = ie_packets + excluded.ie_packets, "
                 "ie_bytes = ie_bytes + excluded.ie_bytes, ei_packets = ei_packets + excluded.ei_packets, "
                 "ei_bytes = ei_bytes + excluded.ei_bytes",
-                (self.analysis_id, minute, packets, nbytes, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b),
+                (self.analysis_id, second, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b),
             )
         for ip, ext in self._externals.items():
             hostname = ext.names.most_common(1)[0][0] if ext.names else self._dns_names.get(ip)

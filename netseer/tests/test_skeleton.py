@@ -9,7 +9,7 @@ from netseer import cli
 EXPECTED_TABLES = {
     "users", "login_attempts", "sessions", "audit_log", "settings", "api_keys", "analyses",
     "analysis_files", "alerts", "devices", "alert_groups", "incidents", "incident_groups",
-    "interpretations", "packet_stats", "ti_cache",
+    "interpretations", "packet_stats", "traffic_stats", "ti_cache",
 }
 
 
