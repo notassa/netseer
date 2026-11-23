@@ -9,6 +9,10 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-23] Playwright usable by orchestrator and workers → new; done, cleaned DB copy via `netseer.eval.browser_env`, tested from a real worker → CLAUDE.md, AGENTS.md → 8547369
+- [2026-11-23] Orchestration token rules → partly adopted: same-session fixes for rejected diffs, 8-read budget, no file dumps; shared plan file rejected (conflicts with copied constants in briefs), rest already covered → CLAUDE.md, AGENTS.md → 8547369
+- [2026-11-23] Site runs via `./startnetseer.sh` on Tailscale → new note; done; Tailscale vs W9 UFW LAN-only left for the owner → CLAUDE.md, RAD-PLAN decisions → 8547369
+- [2026-11-23] Orchestrator-worker + RAD efficiency → good for building, weak on recorded user feedback; empty feedback log created; Claude cost not measured → docs/feedback-log.md → 8547369
 - [2026-11-23] Network: Traffic Source, Network Adapter option, required Session Name → new; done → CONCEPTS A10, brief §9 → 6598fac
 - [2026-11-23] AI: toggleable prompt view + copy button → new; done, buttons do not run the LLM → CONCEPTS A10, brief §9 → 6598fac
 - [2026-11-23] Home: Alert Trend → Traffic Rate (Ingress-Egress / Total) → conflicted with A10; owner approved, packet_stats schema changed; per second → CONCEPTS A10, brief §5/§9 → 6598fac
