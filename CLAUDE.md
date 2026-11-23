@@ -13,7 +13,7 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
 ## Style: always caveman + ponytail
 - At session start, and whenever it applies, use the `caveman:caveman` skill (short, blunt replies, no filler) and the `anthropic-skills:ponytail` skill (smallest complete change, no unrequested extras, end with what was skipped + risks).
 - Never cut for brevity: evidence, numbers, risks, safety, anything the owner asked for.
-- Worker briefs follow the same rules; workers get them through the Ponytail section of `AGENTS.md`.
+- Worker briefs follow the same rules; workers load `caveman` and `ponytail` from `~/.config/opencode/skills/` as `AGENTS.md` requires.
 
 ## Roles: Claude orchestrates, DeepSeek workers code
 - **Claude (orchestrator):** analyse, plan, split work into small tasks, write worker briefs, review every worker diff, run tests, update docs, commit and push. Claude may write code itself only for fixes too small to brief (a few lines) or when a worker failed twice.

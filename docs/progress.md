@@ -5,6 +5,7 @@ Last updated: 2026-11-23
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-23] opencode workers load the caveman and ponytail skills (AGENTS.md)
 - [2026-11-23] Traffic Source card, AI prompt view + copy, Home Traffic Rate (packet_stats by direction), Data Representation setting
 - [2026-11-23] Alert ID and Incident ID columns first in their tables; left panel fixed to screen height
 - [2026-11-18] Risk redesign reviewed: asset criticality counted once (network roll-up no longer weights by I1/9), k^1.5 damping relabelled as a NetSeer heuristic, health framed as a triage index; A5.6 health 62 → 47; model version A5-1.1. 213 tests

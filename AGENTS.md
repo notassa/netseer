@@ -2,6 +2,11 @@
 
 You are a worker. Claude Code is the orchestrator: it gives you one scoped coding task, then reviews your diff and runs the tests. Project background is in `CLAUDE.md` and `docs/CONCEPTS.md`; read only what the brief points to.
 
+## Style skills: /caveman + /ponytail
+- At the start of every task, load the `caveman` and `ponytail` skills with the skill tool. If one fails to load, continue with the rules below and say so in the report.
+- Caveman applies to chat only. Code, comments, docs and test names stay in normal language.
+- Caveman never shortens the final report: keep every section below, with exact paths, commands and numbers.
+
 ## Ponytail: smallest complete change
 - Lazy about the solution, never about the change: finish every caller, test and fixture the task touches.
 - Reuse first: existing helper in this repo → stdlib → installed package → minimal new code. Never add a dependency.
