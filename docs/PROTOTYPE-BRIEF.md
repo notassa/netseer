@@ -48,7 +48,7 @@ pip install fastapi "uvicorn[standard]" jinja2 python-multipart argon2-cffi http
 | NIC | Driver | Role | State at audit |
 |---|---|---|---|
 | `eno1` | e1000e (Intel I219-V, onboard) | **LAN** — dashboard, 192.168.100.24/24, gw 192.168.100.1 | up |
-| `enxec1ac300527e` | r8152 (UGREEN USB 3.0 adapter) | **Mirror port** (C4) — no IP, promiscuous | no carrier (not yet connected to the switch SPAN port) |
+| `enxec1ac300527e` | r8152 (UGREEN USB 3.0 adapter) | **Mirror port** (C4) — no IP, promiscuous | connected to TP-Link ES208G port 5 (mirror of ports 4, 6, 7, 8, both directions); verified 2026-11-23 |
 
 #### Ollama speed (`llama3.2:3b`, short prompt, warm model)
 
