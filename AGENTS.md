@@ -19,7 +19,12 @@ You are a worker. Claude Code is the orchestrator: it gives you one scoped codin
 - Read only the files the brief names, with grep or line ranges; no repo-wide exploration.
 - Run only the test command the brief gives.
 - Same error twice → stop and report it; no blind retries.
-- Keep the final report short.
+- 8 reads or searches in a row with no edit → stop and report what is missing.
+- Keep the final report short: no full file contents or long logs.
+
+## Browser checks
+- Only when the brief names one, on the port it gives: `.venv/bin/python -m netseer.eval.browser_env --port <port> -- ~/.local/share/netseer-playwright/venv/bin/python -I <check.py>`.
+- Never open the real database or use port 8000. Keep check scripts out of the repo unless the brief says otherwise.
 
 ## Do
 - Edit **only** the files named in the brief. If another file must change, stop and say which and why.

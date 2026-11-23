@@ -23,6 +23,12 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
   opencode run -m deepseek/deepseek-v4-pro --auto --title "<task>" "<brief>"
   ```
   Use `deepseek/deepseek-flash` for trivial, mechanical edits. Independent tasks may run in parallel only if they touch different files.
+- **Fix a rejected diff** in the same worker session: `opencode run -s <session-id> ... "<fix>"` (`opencode session list`). Every new task gets a fresh session.
+- **Browser checks:** Playwright lives in `~/.local/share/netseer-playwright`. Run a check script from the session scratchpad, never from the repo, on a cleaned database copy:
+  ```bash
+  .venv/bin/python -m netseer.eval.browser_env --port 8765 -- ~/.local/share/netseer-playwright/venv/bin/python -I <check.py>
+  ```
+  The script reads `NETSEER_E2E_URL`, `NETSEER_E2E_USER` and `NETSEER_E2E_PASSWORD`. Give each parallel worker its own port. Workers run a browser check only when the brief names one; Claude does the final browser review and reads the screenshots.
 - **A brief contains:** goal; exact files to edit (and files to read); the interfaces/functions to use, with paths; constants and numbers copied from the docs (never "as in the docs"); the test to add and the command that must pass; what is out of scope.
 
 ## Token economy and loop guard
@@ -59,7 +65,7 @@ For anything that needs root (apt installs, `suricata-update`, files under `/etc
 ## Environment
 - Ubuntu Server 24.04, user `netseer`, host 192.168.100.24 (LAN). Repo at `~/FYP2_netseer`.
 - Python venv: `~/FYP2_netseer/.venv` (`. .venv/bin/activate`).
-- App: `uvicorn netseer.src.api.main:app --host 0.0.0.0 --port 8000`, run from the repo root. Never run the app as root.
+- App: `./startnetseer.sh` from the repo root (`uvicorn` on `0.0.0.0:8000` with the `suricata` group); also reachable over Tailscale at `100.68.136.34:8000`. It uses the real database and needs a restart after Python changes. Claude does not start, stop or restart it unless the owner asks. Never run the app as root.
 - Ollama on `localhost:11434`, model `llama3.2:3b`. CPU only (i5-9600T), about 1.5 min per explanation.
 - NICs: `eno1` = LAN, `enxec1ac300527e` = switch mirror port (see `docs/PROTOTYPE-BRIEF.md` §3a).
 - opencode v2.3.2 (`~/.opencode/bin/opencode`), DeepSeek credentials stored.

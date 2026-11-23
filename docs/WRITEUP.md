@@ -291,7 +291,7 @@ Updated after every change that moves a number. How each step was checked: `docs
 | C1 | Foundation & offline mode (brief §10 steps 1–4) | Completed (awaiting owner demo) |
 | C2 | ACP & risk (steps 5–7) | Completed (awaiting owner demo) |
 | C3 | Interpretation (steps 8–10) | Completed (awaiting owner demo) |
-| C4 | Real-time mode (steps 11–12) | In progress (code, tests and a real mirrored capture done; alert-delay check pending) |
+| C4 | Real-time mode (steps 11–12) | Completed (awaiting owner demo) |
 
 **Demo numbers (Table 4.13):**
 

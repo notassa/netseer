@@ -5,6 +5,7 @@ Last updated: 2026-11-23
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-23] C4 live check passed (alerts stored in 11.0–29.5 s); worker browser checks, token rules, startnetseer note, empty feedback log
 - [2026-11-23] Real mirrored live capture verified (session 7: 85/85 alerts stored); C4 alert-delay check still open
 - [2026-11-23] opencode workers load the caveman and ponytail skills (AGENTS.md)
 - [2026-11-23] Traffic Source card, AI prompt view + copy, Home Traffic Rate (packet_stats by direction), Data Representation setting
