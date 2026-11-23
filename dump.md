@@ -9,6 +9,13 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-23] Network: Traffic Source, Network Adapter option, required Session Name → new; done → CONCEPTS A10, brief §9 → 6598fac
+- [2026-11-23] AI: toggleable prompt view + copy button → new; done, buttons do not run the LLM → CONCEPTS A10, brief §9 → 6598fac
+- [2026-11-23] Home: Alert Trend → Traffic Rate (Ingress-Egress / Total) → conflicted with A10; owner approved, packet_stats schema changed; per second → CONCEPTS A10, brief §5/§9 → 6598fac
+- [2026-11-23] Settings: Data Representation (bit/byte/packet) → new; done, applies to Traffic Rate → CONCEPTS A15 → 6598fac
+- [2026-11-23] Alert ID column first → existing alerts.id shown, no schema change → CONCEPTS A10 → 0a90eb2
+- [2026-11-23] Incident ID column first → existing incidents.id shown, no schema change → CONCEPTS A10 → 0a90eb2
+- [2026-11-23] Left panel fixed to screen height → new; done → CONCEPTS A10 → 0a90eb2
 - [2026-11-18] Implement docs/risk_scoring_redesign.md → partly adopted: I1 once (unweighted roll-up), k^1.5 = NetSeer heuristic, health = triage index; weighted mean, EMA, lookback window not adopted; ATT&CK breadth deferred → CONCEPTS A5.4/A5.6 → 8049477
 - [2026-11-18] Review docs/netseer-risk-scoring-implementation-spec.md vs current model → not adopted as a whole (would undo A5 decisions; weaker evidence); adopted its audit fields, stable order, evaluation → CONCEPTS A5.3/A5.4
 - [2026-11-18] Don't burn tokens; smarter route when stuck in a loop → new; done → CLAUDE.md "Token economy and loop guard", AGENTS.md "Save tokens"
