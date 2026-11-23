@@ -21,41 +21,17 @@ async function getJSON(url) {
   return r.json();
 }
 
-// Sidebar: toggle the narrow icon rail and remember it per browser; an off-canvas drawer on phones.
+// Sidebar: toggle the narrow icon rail and remember it per browser.
 (function () {
   const btn = document.getElementById("sidebar-toggle");
   if (!btn) return;
-  const phone = () => matchMedia("(max-width: 760px)").matches;
-  const menu = document.getElementById("mobile-menu");
-  const scrim = document.getElementById("nav-scrim");
   const sync = () => btn.setAttribute("aria-expanded", String(!document.documentElement.classList.contains("sidebar-collapsed")));
-  const setOpen = open => {
-    document.documentElement.classList.toggle("nav-open", open);
-    if (scrim) scrim.hidden = !open;
-    if (menu) menu.setAttribute("aria-expanded", String(open));
-  };
-  const open = () => { setOpen(true); document.querySelector(".nav a")?.focus(); };
-  const close = () => {
-    const inside = document.getElementById("app-sidebar")?.contains(document.activeElement);
-    setOpen(false);
-    if (inside && menu) menu.focus();
-  };
   sync();
   btn.addEventListener("click", () => {
-    if (phone()) { close(); return; }
     const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
     sync();
     try { localStorage.setItem("netseer.sidebar", collapsed ? "collapsed" : "open"); } catch (e) { /* private mode */ }
   });
-  menu?.addEventListener("click", () => {
-    document.documentElement.classList.contains("nav-open") ? close() : open();
-  });
-  scrim?.addEventListener("click", close);
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && document.documentElement.classList.contains("nav-open")) close();
-  });
-  const mq = matchMedia("(max-width: 760px)");
-  mq.addEventListener("change", e => { if (!e.matches) close(); });
 })();
 
 // Session countdown (10 minutes from sign-in); only the Extend button adds time.
@@ -181,24 +157,4 @@ document.querySelectorAll("tr[data-href]").forEach(row => row.addEventListener("
     apply();
   });
 })();
-
-// Chart.js helper: read theme colours from CSS variables and format time-axis ticks.
-// Pages that use Chart call netseerChart.theme() once; defining this here is safe without Chart.
-window.netseerChart = {
-  theme() {
-    const root = getComputedStyle(document.documentElement);
-    Chart.defaults.color = root.getPropertyValue("--muted").trim();
-    Chart.defaults.borderColor = root.getPropertyValue("--border").trim();
-    Chart.defaults.font.size = 12;
-    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-    Chart.defaults.plugins.legend.labels.boxWidth = 12;
-  },
-  timeTick(value) {
-    const label = this.getLabelForValue(value);
-    const labels = this.chart.data.labels;
-    const first = labels[0] == null ? "" : String(labels[0]);
-    const last = labels[labels.length - 1] == null ? "" : String(labels[labels.length - 1]);
-    return first.slice(0, 10) === last.slice(0, 10) ? label.slice(11) : label.slice(5);
-  },
-};
 

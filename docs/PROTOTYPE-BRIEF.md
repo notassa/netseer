@@ -229,19 +229,17 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 - Theme stored in `users.theme` (`white` default, `black`). CSS variables switch it.
 
 ## 9. Pages (Jinja2, left sidebar, analysis selector and Log out in the header)
-At phone width (760 px or less) the sidebar becomes a slide-in menu; tables keep all columns and scroll inside their box.
-
 | Page | Must show | Cycle |
 |---|---|---|
 | Setup / Login | First launch: "Create administrator". Otherwise username + password, lockout message | C1 |
 | Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses browser (open, rename, files, **Info** capture checks (A16), re-analyse, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop | C1 / C4 |
 | Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17); long service lists fold behind "+N more" | C1–C2 |
-| Alerts | Packets per *x* minutes line chart (Update button), **"Detected Alert Classes"** scrollable horizontal bar list, filterable table (Alert ID, Time, Severity High…Info, Signature, Class, Direction, Source, Destination, Proto), raw-JSON drawer | C1 |
+| Alerts | Packets per *x* minutes line chart (Update button), **"Detected Alert Classes"** scrollable horizontal bar chart, filterable table (Alert ID, Time, Severity High…Info, Signature, Class, Direction, Source, Destination, Proto), raw-JSON drawer | C1 |
 | Incidents | Table: Incident ID, band chip, score, title, rule, hosts, span, count. Detail: group timeline (Gantt of group spans, scrollable, steps of 1/5/10/20/40/60 min), **factor breakdown table** (factor, value, why, evidence), raw alerts, "Explain with AI" | C2 |
 | Home | Analysis status card (with total traffic) on top, then health gauge + top 3 contributing devices, Traffic Volume (Ingress-Egress / Total, 5–3600 s bins), devices at risk, top 5 incidents | C2 |
 | AI | Sectioned explanation, Prompt Maker buttons, Prompt section (view + copy), verifier badge, flagged sentences highlighted, ref chips that expand to the evidence; **Saved explanations** list (every generated explanation stays re-openable) | C3 |
 | Information | Admin only: Account activity (time, user, event, IP, MAC, vendor) and Process log (time, level, event, analysis, detail); **Clear log** per tab | C1 |
-| Settings | Grouped side menu, one section at a time: Personal (Theme, all); Access (Accounts); System (Configuration in Incident building, Capture, Network, Display groups; AI backend + API keys; Knowledge base; MAC vendors with Wireshark list update); Danger (**Detonate** factory reset) (admin) | C1–C3 |
+| Settings | One tab per section: Theme (all); Accounts, Configuration, AI (backend + API keys), Knowledge base, MAC vendors (Wireshark list update), **Detonate** factory reset (admin) | C1–C3 |
 
 ## 10. Build order & checkpoints (commit after each step)
 **C1 — Foundation & offline**

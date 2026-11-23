@@ -3,34 +3,15 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <h1>Settings</h1>
-<div class="settings-layout">
-<nav class="settings-nav" id="settings-tabs" aria-label="Settings sections">
-  <div class="settings-nav-group">
-    <div class="settings-nav-title">Personal</div>
-    <a href="#tab-theme" data-tab-link="tab-theme">Theme</a>
-  </div>
-  {% if user.role == "admin" %}
-  <div class="settings-nav-group">
-    <div class="settings-nav-title">Access</div>
-    <a href="#tab-accounts" data-tab-link="tab-accounts">Accounts</a>
-  </div>
-  <div class="settings-nav-group">
-    <div class="settings-nav-title">System</div>
-    <a href="#tab-config" data-tab-link="tab-config">Configuration</a>
-    <a href="#tab-ai" data-tab-link="tab-ai">AI</a>
-    <a href="#tab-kb" data-tab-link="tab-kb">Rules &amp; knowledge base</a>
-    <a href="#tab-oui" data-tab-link="tab-oui">MAC vendors</a>
-  </div>
-  <div class="settings-nav-group">
-    <div class="settings-nav-title">Danger</div>
-    <a href="#tab-detonate" data-tab-link="tab-detonate" class="danger-link">Detonate</a>
-  </div>
-  {% endif %}
+<nav class="row-actions" id="settings-tabs" style="margin-bottom:1rem" aria-label="Settings sections">
+  {% for id, label in [("theme", "Theme")] + ([("accounts", "Accounts"), ("config", "Configuration"), ("ai", "AI"),
+       ("kb", "Rules & knowledge base"), ("oui", "MAC vendors"), ("detonate", "Detonate")] if user.role == "admin" else []) %}
+  <a class="btn" href="#tab-{{ id }}" data-tab-link="tab-{{ id }}">{{ label }}</a>
+  {% endfor %}
 </nav>
-<div class="settings-panels">
 
 <div class="card" id="tab-theme" data-tab>
-  <h2>Theme</h2>
+  <h2 style="margin-top:0">Theme</h2>
   <form method="post" action="/settings/theme" class="row-actions">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% for t in ["white", "black"] %}
@@ -41,8 +22,16 @@
 
 {% if user.role == "admin" %}
 <div class="card" id="tab-accounts" data-tab>
-  <div class="table-tools mt-0"><h2>Accounts</h2>{{ reset_sort("accounts-table") }}</div>
+  <div class="table-tools" style="margin-top:0"><h2>Accounts</h2>{{ reset_sort("accounts-table") }}</div>
   <p class="muted">NetSeer has one administrator (view and manage) and at most one user (view only).</p>
+  <form method="post" action="/settings/auto-logout" class="row-actions" style="align-items:center;margin-bottom:.75rem">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="font-weight:normal"><input type="checkbox" name="enabled" {{ 'checked' if auto_logout }}
+           onchange="this.form.submit()"> Auto-logout</label>
+    <span class="muted">{{ "On: sessions end after 10 minutes unless extended." if auto_logout
+                           else "Off: sessions last until sign-out, at most 12 hours." }}</span>
+    <noscript><button class="btn small" type="submit">Save</button></noscript>
+  </form>
   <div class="table-wrap">
   <table class="data sortable" id="accounts-table">
     <thead><tr><th data-key="username">Username</th><th data-key="role">Role</th><th data-key="created">Created</th><th>Actions</th></tr></thead>
@@ -60,7 +49,7 @@
             <input type="password" name="confirm" placeholder="Confirm" minlength="15" maxlength="128" required>
             <button class="btn small" type="submit">Reset password</button>
           </form>
-          <form method="post" action="/settings/users/{{ a.id }}/delete" class="mt-1"
+          <form method="post" action="/settings/users/{{ a.id }}/delete" style="margin-top:.4rem"
                 onsubmit="return confirm('Delete the user account {{ a.username }}?')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button class="btn small danger" type="submit">Delete user</button>
@@ -75,106 +64,71 @@
 
   {% if not has_user %}
   <h2>Create the user account</h2>
-  <form method="post" action="/settings/users" class="measure-sm">
+  <form method="post" action="/settings/users" style="max-width:420px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="new-username">Username</label>
-    <input id="new-username" name="username" type="text" required maxlength="32" class="w-full">
+    <input id="new-username" name="username" type="text" required maxlength="32" style="width:100%">
     <label for="new-password">Password</label>
-    <input id="new-password" name="password" type="password" required minlength="15" maxlength="128" class="w-full">
+    <input id="new-password" name="password" type="password" required minlength="15" maxlength="128" style="width:100%">
     <div class="field-hint">At least 15 characters; not a common password; not the username.</div>
     <label for="new-confirm">Confirm password</label>
-    <input id="new-confirm" name="confirm" type="password" required minlength="15" maxlength="128" class="w-full">
+    <input id="new-confirm" name="confirm" type="password" required minlength="15" maxlength="128" style="width:100%">
     <p><button class="btn primary" type="submit">Create user</button></p>
   </form>
   {% endif %}
-  <h3>Session</h3>
-  <form method="post" action="/settings/auto-logout" class="row-actions row-center mb-3">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if auto_logout }}
-           onchange="this.form.submit()"> Auto-logout</label>
-    <span class="muted">{{ "On: sessions end after 10 minutes unless extended." if auto_logout
-                           else "Off: sessions last until sign-out, at most 12 hours." }}</span>
-    <noscript><button class="btn small" type="submit">Save</button></noscript>
-  </form>
 </div>
 
 <div class="card" id="tab-config" data-tab>
-  <h2>NetSeer configuration</h2>
+  <h2 style="margin-top:0">NetSeer configuration</h2>
   <p class="muted">Saving a new aggregation gap or correlation window re-runs incident building for the selected analysis{% if selected %} (<strong>{{ selected.name }}</strong>){% endif %}; a new half-life re-scores its device risk. LAN CIDRs apply to the next analysis or a re-analyse.</p>
-  <form method="post" action="/settings/config" class="settings-form">
+  <form method="post" action="/settings/config" style="max-width:520px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <section class="settings-group">
-      <h3>Incident building</h3>
-      <div class="settings-fields">
-        {% for key in ["aggregation_gap_s", "correlation_window_min", "half_life_days"] %}
-        {% set label, kind, low, high, unit = config_fields[key] %}
-        <div>
-        <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
-        <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
-               value="{{ config[key] }}" required class="input-md">
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-    <section class="settings-group">
-      <h3>Capture</h3>
-      <div class="settings-fields">
-        {% for key in ["max_upload_mb", "live_interval_s"] %}
-        {% set label, kind, low, high, unit = config_fields[key] %}
-        <div>
-        <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
-        <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
-               value="{{ config[key] }}" required class="input-md">
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-    <section class="settings-group">
-      <h3>Network</h3>
-      <label for="cfg-lan">LAN CIDRs (one per line)</label>
-      <textarea id="cfg-lan" name="lan_cidrs" rows="3" class="w-full">{{ config.lan_cidrs | join('\n') }}</textarea>
-      <label class="check mt-2"><input type="checkbox" name="inside_rules" {{ 'checked' if config.inside_rules }}>
-        Detect attacks from inside the LAN</label>
-      <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).
-        Turn it off for testbed captures such as UNSW-NB15, where it floods the analysis with LAN policy alerts.
-        Applies to the next analysis or Re-analyse.</div>
-      <label class="check mt-2"><input type="checkbox" name="mac_lookup_online" {{ 'checked' if config.mac_lookup_online }}>
-        Look up unknown MAC vendors online</label>
-      <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
-        (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
-    </section>
-    <section class="settings-group">
-      <h3>Display</h3>
-      <label for="cfg-data-unit">Traffic Volume unit</label>
-      <select id="cfg-data-unit" name="data_unit" class="input-md">
-        {% for key, label in data_units.items() %}<option value="{{ key }}" {{ 'selected' if config.data_unit == key }}>{{ label }}</option>{% endfor %}
-      </select>
-      <div class="field-hint">Applies to the Traffic Volume chart on Home.</div>
-    </section>
+    {% for key, (label, kind, low, high, unit) in config_fields.items() %}
+    <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
+    <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
+           value="{{ config[key] }}" required style="width:10rem">
+    {% endfor %}
+    <label for="cfg-lan">LAN CIDRs (one per line)</label>
+    <textarea id="cfg-lan" name="lan_cidrs" rows="3" style="width:100%">{{ config.lan_cidrs | join('\n') }}</textarea>
+    <label style="font-weight:normal;margin-top:.6rem"><input type="checkbox" name="inside_rules" {{ 'checked' if config.inside_rules }}>
+      Detect attacks from inside the LAN</label>
+    <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).
+      Turn it off for testbed captures such as UNSW-NB15, where it floods the analysis with LAN policy alerts.
+      Applies to the next analysis or Re-analyse.</div>
+    <label style="font-weight:normal;margin-top:.6rem"><input type="checkbox" name="mac_lookup_online" {{ 'checked' if config.mac_lookup_online }}>
+      Look up unknown MAC vendors online</label>
+    <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
+      (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
+    <h3>Data Representation</h3>
+    <label for="cfg-data-unit">Traffic Volume unit</label>
+    <select id="cfg-data-unit" name="data_unit" style="width:10rem">
+      {% for key, label in data_units.items() %}<option value="{{ key }}" {{ 'selected' if config.data_unit == key }}>{{ label }}</option>{% endfor %}
+    </select>
+    <div class="field-hint">Applies to the Traffic Volume chart on Home.</div>
     <p><button class="btn primary" type="submit">Save configuration</button></p>
   </form>
-  <p class="muted mb-0">Still to come: data retention (cutover). Rules update is under Rules &amp; knowledge base.</p>
+  <p class="muted" style="margin-bottom:0">Still to come: data retention (cutover). Rules update is under Rules &amp; knowledge base.</p>
 </div>
 
 <div class="card" id="tab-ai" data-tab>
-  <h2>AI backend and API keys</h2>
+  <h2 style="margin-top:0">AI backend and API keys</h2>
   <p class="muted">The local model runs on this machine. The cloud LLM, AbuseIPDB and VirusTotal are optional and use your own keys: with the cloud LLM the evidence package is sent to that service, and threat intelligence sends the outside IP addresses of incidents. Keys are stored encrypted and never shown again.</p>
-  <form method="post" action="/settings/ai" class="measure">
+  <form method="post" action="/settings/ai" style="max-width:520px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <fieldset class="plain-fieldset">
+    <fieldset style="border:0;padding:0;margin:0">
       <legend>LLM backend</legend>
       <label><input type="radio" name="llm_backend" value="ollama" {{ 'checked' if ai.llm_backend != 'cloud' }}> Local (Ollama)</label>
       <label><input type="radio" name="llm_backend" value="cloud" {{ 'checked' if ai.llm_backend == 'cloud' }}> Cloud (OpenAI-compatible API)</label>
     </fieldset>
     <label for="ai-model">Local model</label>
-    <input id="ai-model" name="llm_model" value="{{ ai.llm_model }}" required class="w-full">
+    <input id="ai-model" name="llm_model" value="{{ ai.llm_model }}" required style="width:100%">
     <label for="ai-cloud-url">Cloud API URL</label>
-    <input id="ai-cloud-url" name="cloud_url" value="{{ ai.cloud_url }}" placeholder="https://api.openai.com/v1" class="w-full">
+    <input id="ai-cloud-url" name="cloud_url" value="{{ ai.cloud_url }}" placeholder="https://api.openai.com/v1" style="width:100%">
     <label for="ai-cloud-model">Cloud model</label>
-    <input id="ai-cloud-model" name="cloud_model" value="{{ ai.cloud_model }}" class="w-full">
+    <input id="ai-cloud-model" name="cloud_model" value="{{ ai.cloud_model }}" style="width:100%">
     {% for name, label in key_names.items() %}
     <label for="key-{{ name }}">{{ label }} key {% if name in keys_set %}<span class="badge ok">set</span>{% else %}<span class="badge">not set</span>{% endif %}</label>
-    <input id="key-{{ name }}" name="key_{{ name }}" type="password" autocomplete="off" placeholder="{{ 'leave blank to keep' if name in keys_set else 'paste a key to enable' }}" class="w-full">
+    <input id="key-{{ name }}" name="key_{{ name }}" type="password" autocomplete="off" placeholder="{{ 'leave blank to keep' if name in keys_set else 'paste a key to enable' }}" style="width:100%">
     {% if name in keys_set %}<label class="muted"><input type="checkbox" name="remove_{{ name }}" value="1"> Remove this key</label>{% endif %}
     {% endfor %}
     <p><button class="btn primary" type="submit">Save AI settings</button></p>
@@ -182,7 +136,7 @@
 </div>
 
 <div class="card" id="tab-kb" data-tab>
-  <h2>Suricata rules and AI knowledge base</h2>
+  <h2 style="margin-top:0">Suricata rules and AI knowledge base</h2>
   <p class="muted">Rules, MITRE ATT&amp;CK, classtypes and playbooks the AI explanations draw on (built offline).
     {% if kb.building %}<strong>Rebuilding now…</strong>{% elif kb.built %}Built {{ kb.built }}.{% else %}<strong>Not built yet.</strong>{% endif %}</p>
   <form method="post" action="/settings/kb-rebuild" class="row-actions">
@@ -194,34 +148,32 @@
 </div>
 
 <div class="card" id="tab-oui" data-tab>
-  <h2>MAC vendor list</h2>
+  <h2 style="margin-top:0">MAC vendor list</h2>
   <p class="muted">Device vendors come from Wireshark's MAC vendor list (it also knows the smaller 28 and 36-bit blocks); until it is downloaded, the IEEE list installed on this machine is used. Wireshark refreshes the list about once a week.</p>
   <table class="kv">
     <tr><th>Source</th><td>{% if oui.entries %}Wireshark manuf ({{ '{:,}'.format(oui.entries) }} entries){% else %}IEEE list (ieee-data package){% endif %}</td></tr>
     <tr><th>Version date</th><td>{% if oui.dated %}<time data-epoch="{{ oui.dated }}">{{ oui.dated | int }}</time>{% if oui.generator %} · {{ oui.generator }}{% endif %}{% else %}<span class="unknown">not downloaded</span>{% endif %}</td></tr>
   </table>
-  <form method="post" action="/settings/oui-update" class="mt-3">
+  <form method="post" action="/settings/oui-update" style="margin-top:.75rem">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button class="btn" type="submit" {% if oui.updating %}disabled{% endif %}>{{ 'Updating…' if oui.updating else 'Update to the latest version' }}</button>
   </form>
 </div>
 
-<div class="card card-danger" id="tab-detonate" data-tab>
-  <h2 class="text-danger">Danger zone — Detonate</h2>
+<div class="card" id="tab-detonate" data-tab style="border-color:var(--danger)">
+  <h2 style="margin-top:0;color:var(--danger)">Danger zone — Detonate</h2>
   <p>Returns NetSeer to its clean, first-launch state. This permanently deletes <strong>every analysis and its stored pcap and eve files, both accounts, all settings, API keys and logs</strong>. It cannot be undone. Afterwards NetSeer asks you to create a new administrator.</p>
-  <form method="post" action="/settings/detonate" class="measure-sm"
+  <form method="post" action="/settings/detonate" style="max-width:420px"
         onsubmit="return confirm('Detonate NetSeer? Everything will be deleted permanently.')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="det-password">Your password</label>
-    <input id="det-password" name="password" type="password" required autocomplete="current-password" class="w-full">
+    <input id="det-password" name="password" type="password" required autocomplete="current-password" style="width:100%">
     <label for="det-confirm">Type DETONATE to confirm</label>
-    <input id="det-confirm" name="confirm" type="text" required pattern="DETONATE" autocomplete="off" class="w-full">
+    <input id="det-confirm" name="confirm" type="text" required pattern="DETONATE" autocomplete="off" style="width:100%">
     <p><button class="btn danger" type="submit">Detonate</button></p>
   </form>
 </div>
 {% endif %}
-</div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -233,12 +185,7 @@
   function open(id) {
     if (!cards.some(c => c.id === id)) id = cards[0].id;
     cards.forEach(c => { c.hidden = c.id !== id; });
-    links.forEach(a => {
-      const on = a.dataset.tabLink === id;
-      a.classList.toggle("active", on);
-      if (on) a.setAttribute("aria-current", "true");
-      else a.removeAttribute("aria-current");
-    });
+    links.forEach(a => a.classList.toggle("primary", a.dataset.tabLink === id));
   }
   links.forEach(a => a.addEventListener("click", e => { e.preventDefault(); history.replaceState(null, "", a.hash); open(a.dataset.tabLink); }));
   open(location.hash.slice(1));

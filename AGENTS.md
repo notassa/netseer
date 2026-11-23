@@ -22,8 +22,8 @@ You are a worker. Claude Code is the orchestrator: it gives you one scoped codin
 - 8 reads or searches in a row with no edit → stop and report what is missing.
 - Keep the final report short: no full file contents or long logs.
 
-## UI polish (`unslop`)
-- Load the `unslop` skill only when the brief names approved fixes, and apply only those fixes, after the brief's logic work passes its tests.
+## UI polish
+- Do not use the `unslop` skill.
 - Never redesign a screen or change data, features, risk colors or meanings, verifier wording or "possible" language.
 
 ## Browser checks

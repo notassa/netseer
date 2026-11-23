@@ -131,6 +131,7 @@ One row per brief §10 step or change request, with the evidence that its Check 
 | Owner request (2026-11-23): consistent UI/UX across the system, approved unslop fixes | Done | ✅ `pytest netseer/tests`: 233 passed; Playwright on a cleaned DB copy: 9 pages × 2 themes × 2 widths (36/36), 14/14 interaction checks, no console errors |
 | dump.md ideas (2026-11-23): stale-script chart fix, severity labels without [n] | Done | ✅ static files send `Cache-Control: no-cache`; browser check on DB copy: 4 charts drawn on Home + Alerts, no page errors, no [n] labels; `pytest netseer/tests` 234 passed |
 | dump.md ideas (2026-11-23): Settings structure, mobile layout | Done | ✅ browser check on DB copy at 390 px: 8 pages with no sideways overflow, drawer opens and closes by button, Esc and scrim, 7 Settings sections open, config save works; `pytest netseer/tests` 236 passed |
+| Owner request (2026-11-23): revert UI to `1a2add9`, disable unslop | Done | ✅ `netseer/web` matches `1a2add9` except one severity label line; browser check on DB copy: Home and Alerts charts draw, Settings tabs open, no page errors; `pytest netseer/tests` 234 passed |
 
 ## Decisions to confirm at the demo
 Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belong in CONCEPTS.md; remove them here once confirmed.
