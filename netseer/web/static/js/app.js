@@ -21,17 +21,41 @@ async function getJSON(url) {
   return r.json();
 }
 
-// Sidebar: toggle the narrow icon rail and remember it per browser.
+// Sidebar: toggle the narrow icon rail and remember it per browser; an off-canvas drawer on phones.
 (function () {
   const btn = document.getElementById("sidebar-toggle");
   if (!btn) return;
+  const phone = () => matchMedia("(max-width: 760px)").matches;
+  const menu = document.getElementById("mobile-menu");
+  const scrim = document.getElementById("nav-scrim");
   const sync = () => btn.setAttribute("aria-expanded", String(!document.documentElement.classList.contains("sidebar-collapsed")));
+  const setOpen = open => {
+    document.documentElement.classList.toggle("nav-open", open);
+    if (scrim) scrim.hidden = !open;
+    if (menu) menu.setAttribute("aria-expanded", String(open));
+  };
+  const open = () => { setOpen(true); document.querySelector(".nav a")?.focus(); };
+  const close = () => {
+    const inside = document.getElementById("app-sidebar")?.contains(document.activeElement);
+    setOpen(false);
+    if (inside && menu) menu.focus();
+  };
   sync();
   btn.addEventListener("click", () => {
+    if (phone()) { close(); return; }
     const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
     sync();
     try { localStorage.setItem("netseer.sidebar", collapsed ? "collapsed" : "open"); } catch (e) { /* private mode */ }
   });
+  menu?.addEventListener("click", () => {
+    document.documentElement.classList.contains("nav-open") ? close() : open();
+  });
+  scrim?.addEventListener("click", close);
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && document.documentElement.classList.contains("nav-open")) close();
+  });
+  const mq = matchMedia("(max-width: 760px)");
+  mq.addEventListener("change", e => { if (!e.matches) close(); });
 })();
 
 // Session countdown (10 minutes from sign-in); only the Extend button adds time.

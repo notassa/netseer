@@ -33,3 +33,29 @@ def test_severity_chip_macro():
 def test_static_files_are_revalidated(analysed):
     client, _ = analysed
     assert client.get("/static/js/app.js").headers["cache-control"] == "no-cache"
+
+
+def test_settings_groups_keep_every_section_and_field(analysed):
+    client, _ = analysed
+    page = client.get("/settings").text
+    for title in ("Personal", "Access", "System", "Danger", "Incident building",
+                  "Capture", "Network", "Display", "Session"):
+        assert title in page
+    for tab in ("tab-theme", "tab-accounts", "tab-config", "tab-ai",
+                "tab-kb", "tab-oui", "tab-detonate"):
+        assert f'id="{tab}"' in page
+    for name in ("aggregation_gap_s", "correlation_window_min", "half_life_days",
+                 "max_upload_mb", "live_interval_s", "lan_cidrs", "inside_rules",
+                 "mac_lookup_online", "data_unit"):
+        assert f'name="{name}"' in page
+    assert "Still to come: data retention" in page
+
+
+def test_mobile_menu_markup(analysed):
+    client, _ = analysed
+    page = client.get("/alerts").text
+    assert 'id="mobile-menu"' in page
+    assert 'aria-controls="app-sidebar"' in page
+    assert 'id="app-sidebar"' in page
+    assert 'id="nav-scrim"' in page
+    assert 'aria-label="Log out"' in page

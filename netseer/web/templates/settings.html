@@ -3,12 +3,31 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <h1>Settings</h1>
-<nav class="row-actions mb-4" id="settings-tabs" aria-label="Settings sections">
-  {% for id, label in [("theme", "Theme")] + ([("accounts", "Accounts"), ("config", "Configuration"), ("ai", "AI"),
-       ("kb", "Rules & knowledge base"), ("oui", "MAC vendors"), ("detonate", "Detonate")] if user.role == "admin" else []) %}
-  <a class="btn" href="#tab-{{ id }}" data-tab-link="tab-{{ id }}">{{ label }}</a>
-  {% endfor %}
+<div class="settings-layout">
+<nav class="settings-nav" id="settings-tabs" aria-label="Settings sections">
+  <div class="settings-nav-group">
+    <div class="settings-nav-title">Personal</div>
+    <a href="#tab-theme" data-tab-link="tab-theme">Theme</a>
+  </div>
+  {% if user.role == "admin" %}
+  <div class="settings-nav-group">
+    <div class="settings-nav-title">Access</div>
+    <a href="#tab-accounts" data-tab-link="tab-accounts">Accounts</a>
+  </div>
+  <div class="settings-nav-group">
+    <div class="settings-nav-title">System</div>
+    <a href="#tab-config" data-tab-link="tab-config">Configuration</a>
+    <a href="#tab-ai" data-tab-link="tab-ai">AI</a>
+    <a href="#tab-kb" data-tab-link="tab-kb">Rules &amp; knowledge base</a>
+    <a href="#tab-oui" data-tab-link="tab-oui">MAC vendors</a>
+  </div>
+  <div class="settings-nav-group">
+    <div class="settings-nav-title">Danger</div>
+    <a href="#tab-detonate" data-tab-link="tab-detonate" class="danger-link">Detonate</a>
+  </div>
+  {% endif %}
 </nav>
+<div class="settings-panels">
 
 <div class="card" id="tab-theme" data-tab>
   <h2>Theme</h2>
@@ -24,14 +43,6 @@
 <div class="card" id="tab-accounts" data-tab>
   <div class="table-tools mt-0"><h2>Accounts</h2>{{ reset_sort("accounts-table") }}</div>
   <p class="muted">NetSeer has one administrator (view and manage) and at most one user (view only).</p>
-  <form method="post" action="/settings/auto-logout" class="row-actions row-center mb-3">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if auto_logout }}
-           onchange="this.form.submit()"> Auto-logout</label>
-    <span class="muted">{{ "On: sessions end after 10 minutes unless extended." if auto_logout
-                           else "Off: sessions last until sign-out, at most 12 hours." }}</span>
-    <noscript><button class="btn small" type="submit">Save</button></noscript>
-  </form>
   <div class="table-wrap">
   <table class="data sortable" id="accounts-table">
     <thead><tr><th data-key="username">Username</th><th data-key="role">Role</th><th data-key="created">Created</th><th>Actions</th></tr></thead>
@@ -76,35 +87,70 @@
     <p><button class="btn primary" type="submit">Create user</button></p>
   </form>
   {% endif %}
+  <h3>Session</h3>
+  <form method="post" action="/settings/auto-logout" class="row-actions row-center mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if auto_logout }}
+           onchange="this.form.submit()"> Auto-logout</label>
+    <span class="muted">{{ "On: sessions end after 10 minutes unless extended." if auto_logout
+                           else "Off: sessions last until sign-out, at most 12 hours." }}</span>
+    <noscript><button class="btn small" type="submit">Save</button></noscript>
+  </form>
 </div>
 
 <div class="card" id="tab-config" data-tab>
   <h2>NetSeer configuration</h2>
   <p class="muted">Saving a new aggregation gap or correlation window re-runs incident building for the selected analysis{% if selected %} (<strong>{{ selected.name }}</strong>){% endif %}; a new half-life re-scores its device risk. LAN CIDRs apply to the next analysis or a re-analyse.</p>
-  <form method="post" action="/settings/config" class="measure">
+  <form method="post" action="/settings/config" class="settings-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    {% for key, (label, kind, low, high, unit) in config_fields.items() %}
-    <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
-    <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
-           value="{{ config[key] }}" required class="input-md">
-    {% endfor %}
-    <label for="cfg-lan">LAN CIDRs (one per line)</label>
-    <textarea id="cfg-lan" name="lan_cidrs" rows="3" class="w-full">{{ config.lan_cidrs | join('\n') }}</textarea>
-    <label class="check mt-2"><input type="checkbox" name="inside_rules" {{ 'checked' if config.inside_rules }}>
-      Detect attacks from inside the LAN</label>
-    <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).
-      Turn it off for testbed captures such as UNSW-NB15, where it floods the analysis with LAN policy alerts.
-      Applies to the next analysis or Re-analyse.</div>
-    <label class="check mt-2"><input type="checkbox" name="mac_lookup_online" {{ 'checked' if config.mac_lookup_online }}>
-      Look up unknown MAC vendors online</label>
-    <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
-      (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
-    <h3>Data Representation</h3>
-    <label for="cfg-data-unit">Traffic Volume unit</label>
-    <select id="cfg-data-unit" name="data_unit" class="input-md">
-      {% for key, label in data_units.items() %}<option value="{{ key }}" {{ 'selected' if config.data_unit == key }}>{{ label }}</option>{% endfor %}
-    </select>
-    <div class="field-hint">Applies to the Traffic Volume chart on Home.</div>
+    <section class="settings-group">
+      <h3>Incident building</h3>
+      <div class="settings-fields">
+        {% for key in ["aggregation_gap_s", "correlation_window_min", "half_life_days"] %}
+        {% set label, kind, low, high, unit = config_fields[key] %}
+        <div>
+        <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
+        <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
+               value="{{ config[key] }}" required class="input-md">
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="settings-group">
+      <h3>Capture</h3>
+      <div class="settings-fields">
+        {% for key in ["max_upload_mb", "live_interval_s"] %}
+        {% set label, kind, low, high, unit = config_fields[key] %}
+        <div>
+        <label for="cfg-{{ key }}">{{ label }} ({{ unit }})</label>
+        <input id="cfg-{{ key }}" name="{{ key }}" type="number" min="{{ low }}" max="{{ high }}" step="{{ 'any' if key == 'half_life_days' else 1 }}"
+               value="{{ config[key] }}" required class="input-md">
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="settings-group">
+      <h3>Network</h3>
+      <label for="cfg-lan">LAN CIDRs (one per line)</label>
+      <textarea id="cfg-lan" name="lan_cidrs" rows="3" class="w-full">{{ config.lan_cidrs | join('\n') }}</textarea>
+      <label class="check mt-2"><input type="checkbox" name="inside_rules" {{ 'checked' if config.inside_rules }}>
+        Detect attacks from inside the LAN</label>
+      <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).
+        Turn it off for testbed captures such as UNSW-NB15, where it floods the analysis with LAN policy alerts.
+        Applies to the next analysis or Re-analyse.</div>
+      <label class="check mt-2"><input type="checkbox" name="mac_lookup_online" {{ 'checked' if config.mac_lookup_online }}>
+        Look up unknown MAC vendors online</label>
+      <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
+        (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
+    </section>
+    <section class="settings-group">
+      <h3>Display</h3>
+      <label for="cfg-data-unit">Traffic Volume unit</label>
+      <select id="cfg-data-unit" name="data_unit" class="input-md">
+        {% for key, label in data_units.items() %}<option value="{{ key }}" {{ 'selected' if config.data_unit == key }}>{{ label }}</option>{% endfor %}
+      </select>
+      <div class="field-hint">Applies to the Traffic Volume chart on Home.</div>
+    </section>
     <p><button class="btn primary" type="submit">Save configuration</button></p>
   </form>
   <p class="muted mb-0">Still to come: data retention (cutover). Rules update is under Rules &amp; knowledge base.</p>
@@ -174,6 +220,8 @@
   </form>
 </div>
 {% endif %}
+</div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -185,7 +233,12 @@
   function open(id) {
     if (!cards.some(c => c.id === id)) id = cards[0].id;
     cards.forEach(c => { c.hidden = c.id !== id; });
-    links.forEach(a => a.classList.toggle("primary", a.dataset.tabLink === id));
+    links.forEach(a => {
+      const on = a.dataset.tabLink === id;
+      a.classList.toggle("active", on);
+      if (on) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
+    });
   }
   links.forEach(a => a.addEventListener("click", e => { e.preventDefault(); history.replaceState(null, "", a.hash); open(a.dataset.tabLink); }));
   open(location.hash.slice(1));
