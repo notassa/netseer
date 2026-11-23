@@ -7,8 +7,13 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 - Prompt "read dump.md #Inbox"
 
 ## Inbox
+- make left sidebar unaffect by the site scroll (stay in position).
+- reorganize Settings page into proper ui/ux structure.
+- make the ui/ux appears properly in mobile version as well.
 
 ## Reviewed
+- [2026-11-23] All graphs broken → new bug from stale cached app.js; fixed with no-cache on static files → 92f8c77
+- [2026-11-23] Alerts severity without [x] → conflicted with CONCEPTS A5.5, brief §9; done everywhere → CONCEPTS, brief §9, WRITEUP → 92f8c77
 - [2026-11-23] Use /unslop for UI/UX after logic → new; adopted with limits (polish only, audit first, protected risk and wording), pinned 620163e → CLAUDE.md, AGENTS.md → c6efa5d
 - [2026-11-23] Traffic Volume as lines → new; done → CONCEPTS A10 → c6efa5d
 - [2026-11-23] Sidebar bound to browser height, Log out to topbar → height already done; move done → CONCEPTS A10, brief §9 → c6efa5d
