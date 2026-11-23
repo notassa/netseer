@@ -6,12 +6,12 @@
 
 <div class="grid">
   <div class="card">
-    <h2 style="margin-top:0">Traffic Source</h2>
+    <h2>Traffic Source</h2>
     {% if user.role != "admin" %}
     <p class="muted">Only the administrator can upload captures or start a live session.</p>
     {% else %}
     <label for="upload-session">Session</label>
-    <select id="upload-session" style="width:100%">
+    <select id="upload-session" class="w-full">
       <option value="">New session</option>
       {% for a in sessions %}<option value="{{ a.id }}" {{ 'selected' if selected and selected.id == a.id }}>Add to: {{ a.name }} ({{ a.n_files }} file{{ 's' if a.n_files != 1 }})</option>{% endfor %}
       <option value="adapter">Network Adapter</option>
@@ -20,12 +20,12 @@
       <p class="muted">Upload one packet capture (.pcap / .pcapng) at a time into a <strong>session</strong>. Add more files to the same session later: all its files are merged in time order into one longer analysis.</p>
       <div id="session-name-field">
         <label for="upload-name">Session Name</label>
-        <input type="text" id="upload-name" maxlength="120" style="width:100%">
+        <input type="text" id="upload-name" maxlength="120" class="w-full">
       </div>
       <label for="upload-file">Capture file</label>
       <input type="file" id="upload-file" accept=".pcap,.pcapng,.cap" required>
       <div class="field-hint">Up to {{ max_upload_mb }} MB. Keep this page open while the file uploads.</div>
-      <label style="font-weight:normal"><input type="checkbox" id="upload-analyse" checked> Analyse after upload (untick to add more files first)</label>
+      <label class="check"><input type="checkbox" id="upload-analyse" checked> Analyse after upload (untick to add more files first)</label>
       <p><button class="btn primary" type="submit" id="upload-btn">Upload</button></p>
     </form>
     <div id="upload-status" hidden>
@@ -42,7 +42,7 @@
         {% for field, title, hint in [("mirror", "Mirror NIC (switch SPAN port)", "No IP address; it only listens."),
                                       ("lan", "LAN NIC (dashboard access)", "The card this page is reached through.")] %}
         <label for="live-{{ field }}">{{ title }}</label>
-        <select id="live-{{ field }}" name="{{ field }}" style="width:100%">
+        <select id="live-{{ field }}" name="{{ field }}" class="w-full">
           {% for n in nics %}<option value="{{ n.name }}" {{ 'selected' if (field == 'lan') == n.has_ipv4 }}>{{ n.name }} · {{ 'link up' if n.carrier else 'no link' }}{{ ' · has IP' if n.has_ipv4 }}</option>{% endfor %}
         </select>
         <div class="field-hint">{{ hint }}</div>
@@ -68,18 +68,18 @@
     <td data-sort="{{ a.name }}">
       <form method="post" action="/network/analyses/{{ a.id }}/rename" class="row-actions">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="name" value="{{ a.name }}" maxlength="120" style="min-width:280px" aria-label="Analysis name">
+        <input type="text" name="name" value="{{ a.name }}" maxlength="120" class="min-w-lg" aria-label="Analysis name">
         <button class="btn small" type="submit">Rename</button>
       </form>
-      {% if selected and selected.id == a.id %}<span class="badge info" style="margin-top:.3rem">selected</span>{% endif %}
+      {% if selected and selected.id == a.id %}<span class="badge info mt-1">selected</span>{% endif %}
     </td>
     <td>{{ a.mode }}</td>
     <td>
       <span class="badge {{ a.status | status_class }} js-status">{{ a.status | replace('_', ' ') }}</span>
       {% if a.mode == "live" and a.status in active_statuses %}
-      <div class="muted js-message" style="max-width:260px">{{ live_message(a) }}</div>
+      <div class="muted js-message cell-note">{{ live_message(a) }}</div>
       {% if user.role == "admin" %}
-      <div class="row-actions" style="margin-top:.3rem">
+      <div class="row-actions mt-1">
         {% if a.status == "ready" %}
         <form method="post" action="/network/live/{{ a.id }}/start"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button class="btn small primary" type="submit">Start capture</button></form>{% endif %}
@@ -91,16 +91,16 @@
       <div class="stage-label"><span class="js-stage"></span><span class="js-pct"></span></div>
       <div class="progress js-bar"><div></div></div>
       {% if user.role == "admin" and a.status != "uploading" %}
-      <button class="btn small danger js-stop" type="button" style="margin-top:.3rem"
+      <button class="btn small danger js-stop mt-1" type="button"
               title="Stop this run, clear its results and keep the capture for a re-run">Stop</button>
       {% endif %}
       {% endif %}
-      {% if a.error %}<div class="muted" style="max-width:260px">{{ a.error }}</div>{% endif %}
+      {% if a.error %}<div class="muted cell-note">{{ a.error }}</div>{% endif %}
     </td>
     <td>{{ a.created_at[:16] | replace('T', ' ') }}</td>
     <td data-sort="{{ a.total_size }}">
       <details><summary>{{ a.n_files }} file{{ 's' if a.n_files != 1 }}{% if a.total_size %} <span class="muted">({{ (a.total_size / 1048576) | round(1) }} MB)</span>{% endif %}</summary>
-        {% for f in files.get(a.id, []) %}<div class="muted row-actions" style="white-space:nowrap;align-items:center">{{ loop.index }}. {{ f.filename }} · {{ (f.size / 1048576) | round(1) }} MB · <span title="SHA-256 {{ f.sha256 }}">{{ f.sha256[:12] }}…</span>
+        {% for f in files.get(a.id, []) %}<div class="muted row-actions nowrap row-center">{{ loop.index }}. {{ f.filename }} · {{ (f.size / 1048576) | round(1) }} MB · <span title="SHA-256 {{ f.sha256 }}">{{ f.sha256[:12] }}…</span>
           {% if user.role == "admin" and a.status not in active_statuses %}
           <form method="post" action="/network/analyses/{{ a.id }}/files/delete"
                 onsubmit="return confirm('Delete {{ f.filename }}? {{ 'This is the last file: the whole session is deleted.' if files[a.id] | length == 1 else 'The session results are cleared; press Analyse to re-run with the other files.' }}')">
@@ -114,10 +114,10 @@
       {% if user.role == "admin" %}
       <form method="post" action="/network/analyses/{{ a.id }}/note">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <textarea name="note" maxlength="1000" rows="2" style="min-width:180px" aria-label="Note for {{ a.name }}">{{ a.note or '' }}</textarea>
+        <textarea name="note" maxlength="1000" rows="2" class="min-w-md" aria-label="Note for {{ a.name }}">{{ a.note or '' }}</textarea>
         <div><button class="btn small" type="submit">Save note</button></div>
       </form>
-      {% else %}<span style="white-space:pre-wrap">{{ a.note or '' }}</span>{% endif %}
+      {% else %}<span class="pre-wrap">{{ a.note or '' }}</span>{% endif %}
     </td>
     <td>
       <div class="row-actions">

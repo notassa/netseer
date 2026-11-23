@@ -158,3 +158,23 @@ document.querySelectorAll("tr[data-href]").forEach(row => row.addEventListener("
   });
 })();
 
+// Chart.js helper: read theme colours from CSS variables and format time-axis ticks.
+// Pages that use Chart call netseerChart.theme() once; defining this here is safe without Chart.
+window.netseerChart = {
+  theme() {
+    const root = getComputedStyle(document.documentElement);
+    Chart.defaults.color = root.getPropertyValue("--muted").trim();
+    Chart.defaults.borderColor = root.getPropertyValue("--border").trim();
+    Chart.defaults.font.size = 12;
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  },
+  timeTick(value) {
+    const label = this.getLabelForValue(value);
+    const labels = this.chart.data.labels;
+    const first = labels[0] == null ? "" : String(labels[0]);
+    const last = labels[labels.length - 1] == null ? "" : String(labels[labels.length - 1]);
+    return first.slice(0, 10) === last.slice(0, 10) ? label.slice(11) : label.slice(5);
+  },
+};
+

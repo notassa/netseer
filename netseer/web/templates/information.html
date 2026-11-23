@@ -4,7 +4,7 @@
 {% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
 {% block content %}
 <h1>Information</h1>
-<div class="row-actions" style="margin-bottom:1rem">
+<div class="row-actions mb-4">
   <a class="btn {{ 'primary' if tab == 'account' }}" href="/information?tab=account">Account activity</a>
   <a class="btn {{ 'primary' if tab == 'process' }}" href="/information?tab=process">Process log</a>
   <a class="btn {{ 'primary' if tab == 'details' }}" href="/information?tab=details">NetSeer details</a>
@@ -14,7 +14,7 @@
 <p class="muted">The machine NetSeer runs on. Usage and temperatures refresh every 5 seconds.</p>
 <div class="grid">
   <div class="card">
-    <h2 style="margin-top:0">System</h2>
+    <h2>System</h2>
     <table class="kv">
       <tr><th>Hostname</th><td>{{ sys.hostname }}</td></tr>
       <tr><th>Operating system</th><td>{{ sys.os }} · kernel {{ sys.kernel }}</td></tr>
@@ -27,7 +27,7 @@
     </table>
   </div>
   <div class="card">
-    <h2 style="margin-top:0">Usage</h2>
+    <h2>Usage</h2>
     <table class="kv" id="sys-usage">
       <tr><th>CPU</th><td id="u-cpu">{{ sys.usage.cpu_percent }}%</td></tr>
       <tr><th>Load (1/5/15 min)</th><td id="u-load">{{ sys.usage.load | join(' / ') }}</td></tr>
@@ -63,7 +63,7 @@
     </select></div>
   <div><button class="btn primary" type="submit">Filter</button> <a class="btn" href="/information?tab={{ tab }}">Clear</a> {{ reset_sort("log-table") }}</div>
 </form>
-<form method="post" action="/information/clear" style="margin:-.25rem 0 .75rem"
+<form method="post" action="/information/clear" class="form-flush"
       onsubmit="return confirm('Delete every entry of the {{ 'account activity' if tab == 'account' else 'process' }} log? This cannot be undone.')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="tab" value="{{ tab }}">
@@ -95,7 +95,7 @@
     <td><span class="badge {{ {'info': 'info', 'warning': 'warn', 'error': 'danger'}[e.level] }}">{{ e.level }}</span></td>
     <td>{{ e.label }}</td>
     <td>{{ e.username or 'NetSeer' }}</td>
-    <td style="max-width:640px;word-break:break-word">{{ e.detail }}</td>
+    <td class="cell-wrap">{{ e.detail }}</td>
   </tr>
   {% else %}<tr><td colspan="5" class="muted">No entries.</td></tr>{% endfor %}
   </tbody>

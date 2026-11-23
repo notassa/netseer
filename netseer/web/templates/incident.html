@@ -15,15 +15,15 @@
     <div class="stat"><div class="value">{{ inc.n_alerts }}</div><div class="label">Alerts in {{ groups | length }} group{{ 's' if groups | length != 1 }}</div></div>
     <div class="stat"><div class="value">{{ inc.rule | replace(',', ', ') }}</div><div class="label">Linked by</div></div>
   </div>
-  <p class="muted" style="margin-bottom:0">
+  <p class="muted mb-0">
     {{ inc.first_seen[:19] | replace('T', ' ') }} to {{ inc.last_seen[:19] | replace('T', ' ') }} UTC ·
     Sources: {{ inc.src_ips | join(', ') or 'unknown' }} · Destinations: {{ inc.dest_ips | join(', ') or 'unknown' }}
     {% if evidence.tactics %}<br>ATT&amp;CK tactics: {% for t in evidence.tactics %}<span class="badge">{{ t.name }}</span> {% endfor %}{% endif %}
     {% if evidence.techniques %}· techniques: {{ evidence.techniques | join(', ') }}{% endif %}
   </p>
-  {% if recon_before %}<p style="margin-bottom:0">Preceded by recon:
+  {% if recon_before %}<p class="mb-0">Preceded by recon:
     {% for r in recon_before %}<a href="/incidents/{{ r.id }}">{{ band_chip(r.band) }} {{ r.title }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
-  <p style="margin-bottom:0"><a class="btn primary" href="/ai?incident={{ inc.id }}">Explain with AI</a></p>
+  <p class="mb-0"><a class="btn primary" href="/ai?incident={{ inc.id }}">Explain with AI</a></p>
 </div>
 
 <h2>Attack → Victim</h2>
@@ -64,7 +64,7 @@
 
 <h2>Timeline</h2>
 <div class="card">
-  <div class="row-actions" style="margin-bottom:.6rem">
+  <div class="row-actions mb-2">
     <span class="muted">Step</span>
     {% for m in [1, 5, 10, 20, 40, 60] %}<button class="btn small" type="button" data-step="{{ m }}">{{ m }} min</button>{% endfor %}
     {% if timeline | length > timeline_groups %}<button class="btn small" type="button" id="gantt-all">Show all {{ timeline | length }} groups</button>{% endif %}
@@ -94,7 +94,7 @@
 </table>
 </div>
 
-<h2>Raw alerts <span class="muted" style="font-weight:normal">({% if inc.n_alerts > raw_limit %}first {{ raw_limit }} of {% endif %}{{ inc.n_alerts }})</span></h2>
+<h2>Raw alerts <span class="muted">({% if inc.n_alerts > raw_limit %}first {{ raw_limit }} of {% endif %}{{ inc.n_alerts }})</span></h2>
 <div class="table-wrap">
 <table class="data">
   <thead><tr><th>Time (UTC)</th><th>Source</th><th>Destination</th><th>Signature</th><th>Severity</th><th>Direction</th></tr></thead>

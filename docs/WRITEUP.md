@@ -258,7 +258,7 @@ deterministic.
 | Setup / Login | First launch creates the admin; then `/setup` is gone. Lockout after 5 failures |
 | Network | Traffic Source: upload into a named session or pick network adapters; upload into a session (files merged; a file already uploaded or with a broken header is refused), delete single files, progress per stage, **Stop**, Re-analyse, capture checks (gaps, loss, truncation), notes |
 | Home | Health gauge and what costs it points, Traffic Volume (ingress/egress and stacked total), devices at risk, top incidents |
-| Alerts | Packets and alerts per *x* minutes (each its own bin size), top 5 devices by alerts, "Detected Alert Classes" bar chart (shares, not risk), filter frame with tick boxes, raw JSON drawer. Hover a column head to see what it holds |
+| Alerts | Packets and alerts per *x* minutes (each its own bin size), top 5 devices by alerts, "Detected Alert Classes" bar list (shares, not risk), filter frame with tick boxes, raw JSON drawer. Hover a column head to see what it holds |
 | Incidents | Ranked by band then score → detail: Attack → Victim, timeline, groups, factor table, raw alerts |
 | Devices | Inventory (MAC, vendor, hostname, services, type, risk), attribution prompt, external sources, network map |
 | AI | Explanation with the verifier badge, viewable and copyable prompt, ref chips, progress % and Stop, saved explanations (admin can clear) |

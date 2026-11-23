@@ -5,7 +5,7 @@
   ("alerts", "/alerts", "Alerts", false, "M12 3l10 18H2zM12 10v5M12 18h.01"),
   ("incidents", "/incidents", "Incidents", false, "M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"),
   ("devices", "/devices", "Devices", false, "M3 5h18v11H3zM8 20h8M12 16v4"),
-  ("ai", "/ai", "AI", true, "M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9 22h6"),
+  ("ai", "/ai", "AI", false, "M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9 22h6"),
   ("information", "/information", "Information", false, "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 11v6M12 7h.01"),
   ("settings", "/settings", "Settings", false, "M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4"),
 ] %}
@@ -26,7 +26,7 @@
       <form method="post" action="/analyses/select" id="analysis-select-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next" value="{{ request.url.path }}">
-        <label for="analysis-select" style="display:inline;margin:0 .4rem 0 0">Analysis</label>
+        <label for="analysis-select" class="topbar-label">Analysis</label>
         <select id="analysis-select" name="analysis_id" onchange="this.form.submit()">
           {% if not analyses %}<option value="">No analyses yet</option>{% endif %}
           {% if analyses and not selected %}<option value="" selected>Choose an analysis…</option>{% endif %}

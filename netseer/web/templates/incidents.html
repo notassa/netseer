@@ -8,7 +8,7 @@
 {% else %}
 <p class="muted">Possible incidents: alert groups that NetSeer linked with a correlation rule, scored by likelihood × impact.
   {{ n_alerts }} alerts → {{ n_groups }} alert groups → {{ total }} possible incidents. Fewer rows means less to read, not fewer threats.</p>
-<h2>Possible incidents <span class="muted" style="font-weight:normal">({{ rows | length }} matching)</span></h2>
+<h2>Possible incidents <span class="muted">({{ rows | length }} matching)</span></h2>
 <form method="get" action="/incidents" class="filters">
   <div><label for="f-q">Search</label>{{ search_input("f-q", "q", params.q, options, "title or IP") }}</div>
   <div><label for="f-band">Band</label>

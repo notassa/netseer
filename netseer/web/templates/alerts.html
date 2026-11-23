@@ -10,11 +10,11 @@
 <datalist id="bin-choices">{% for m in [1, 5, 10, 15, 30, 60, 120, 360, 720, 1440] %}<option value="{{ m }}">{% endfor %}</datalist>
 {% macro series_card(key, title, rows, empty) %}
   <div class="card">
-    <h2 style="margin-top:0">{{ title }} per <span class="js-bin-label">{{ bin_minutes }}</span> minutes</h2>
+    <h2>{{ title }} per <span class="js-bin-label">{{ bin_minutes }}</span> <span class="js-bin-unit">minute{{ 's' if bin_minutes != 1 }}</span></h2>
     {% if rows %}
-    <form class="row-actions js-bin-form" data-series="{{ key }}" style="margin-bottom:.5rem">
-      <label for="bin-{{ key }}" style="margin:0">Bin size (minutes)</label>
-      <input id="bin-{{ key }}" type="number" min="1" max="1440" value="{{ bin_minutes }}" list="bin-choices" style="width:6rem">
+    <form class="row-actions js-bin-form mb-2" data-series="{{ key }}">
+      <label for="bin-{{ key }}" class="m-0">Bin size (minutes)</label>
+      <input id="bin-{{ key }}" type="number" min="1" max="1440" value="{{ bin_minutes }}" list="bin-choices" class="input-num">
       <button class="btn small primary" type="submit">Update</button>
     </form>
     <div class="chart-box"><canvas id="{{ key }}-chart"></canvas></div>
@@ -25,37 +25,37 @@
 {{ series_card("packets", "Packets", packets, "No flow records yet.") }}
 {{ series_card("alerts", "Alerts", alert_counts, "No alerts in this analysis.") }}
   <div class="card">
-    <h2 style="margin-top:0">Detected Alert Classes</h2>
+    <h2>Detected Alert Classes</h2>
     {% if total or mix.classtype %}
-    <div class="row-actions" style="margin-bottom:.5rem">
-      <button class="btn small primary" data-mix="classtype">By classtype</button>
-      <button class="btn small" data-mix="priority">By severity</button>
+    <div class="row-actions mb-2">
+      <button class="btn small primary" data-mix="classtype" aria-pressed="true">By classtype</button>
+      <button class="btn small" data-mix="priority" aria-pressed="false">By severity</button>
     </div>
-    <div class="mix-scroll" tabindex="0" aria-label="Alert classes, scrollable"><div class="chart-box" id="mix-box"><canvas id="mix-chart"></canvas></div></div>
+    <div class="mix-list" id="mix-list" tabindex="0" aria-label="Alert classes, scrollable"></div>
     <div class="field-hint">How the alerts divide up (not risk). A large share does not mean high risk; risk is scored per incident.</div>
     {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
   </div>
-  <div class="card">
-    <h2 style="margin-top:0">Top 5 devices by alerts</h2>
-    {% if top_devices %}
-    <div class="table-wrap"><table class="data">
-      <thead><tr><th>Device</th>
-        <th>Type</th>
-        <th>Sent</th>
-        <th>Received</th>
-        <th>Total</th></tr></thead>
-      <tbody>{% for d in top_devices %}
-        <tr><td>{{ d.ip }}{% if d.hostname %} <span class="muted">{{ d.hostname }}</span>{% endif %}</td>
-          <td>{{ device_types.get(d.type, d.type) }}</td>
-          <td><a href="/alerts?src_ip={{ d.ip | urlencode }}">{{ d.sent }}</a></td>
-          <td><a href="/alerts?dest_ip={{ d.ip | urlencode }}">{{ d.received }}</a></td><td>{{ d.total }}</td></tr>
-      {% endfor %}</tbody>
-    </table></div>
-    {% else %}<p class="muted">No device is involved in an alert.</p>{% endif %}
-  </div>
+</div>
+<div class="card">
+  <h2>Top 5 devices by alerts</h2>
+  {% if top_devices %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Device</th>
+      <th>Type</th>
+      <th>Sent</th>
+      <th>Received</th>
+      <th>Total</th></tr></thead>
+    <tbody>{% for d in top_devices %}
+      <tr><td>{{ d.ip }}{% if d.hostname %} <span class="muted">{{ d.hostname }}</span>{% endif %}</td>
+        <td>{{ device_types.get(d.type, d.type) }}</td>
+        <td><a href="/alerts?src_ip={{ d.ip | urlencode }}">{{ d.sent }}</a></td>
+        <td><a href="/alerts?dest_ip={{ d.ip | urlencode }}">{{ d.received }}</a></td><td>{{ d.total }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">No device is involved in an alert.</p>{% endif %}
 </div>
 
-<h2>Alert table <span class="muted" style="font-weight:normal">({{ total }} matching)</span></h2>
+<h2>Alert table <span class="muted">({{ total }} matching)</span></h2>
 <details class="filter-frame" {{ 'open' if n_filters }}>
 <summary>Filters{% if n_filters %} <span class="badge info">{{ n_filters }} active</span>{% endif %}</summary>
 <form method="get" action="/alerts">
@@ -115,22 +115,23 @@
 <script>
 (function () {
   const css = getComputedStyle(document.documentElement);
-  const text = css.getPropertyValue("--muted").trim(), grid = css.getPropertyValue("--border").trim();
   const accent = css.getPropertyValue("--accent").trim();
-  Chart.defaults.color = text; Chart.defaults.borderColor = grid;
+  netseerChart.theme();
 
   // Packets and alerts per x minutes: each chart has its own bin size and Update button.
   const series = { packets: [{{ packets | tojson }}, "packets", accent],
-                   alerts: [{{ alert_counts | tojson }}, "alert-series", css.getPropertyValue("--danger").trim()] };
+                   alerts: [{{ alert_counts | tojson }}, "alert-series", css.getPropertyValue("--muted").trim()] };
   document.querySelectorAll(".js-bin-form").forEach(form => {
     const key = form.dataset.series, [rows, api, color] = series[key];
     const chart = new Chart(document.getElementById(`${key}-chart`), {
       type: "line",
       data: { labels: rows.map(p => p.t),
               datasets: [{ label: key, data: rows.map(p => p[key]), borderColor: color,
-                           backgroundColor: color, tension: 0.2, pointRadius: 3 }] },
+                           backgroundColor: color, tension: 0.2,
+                           pointRadius: c => c.chart.data.labels.length <= 60 ? 3 : 0, pointHoverRadius: 4 }] },
       options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
-                 scales: { y: { beginAtZero: true, title: { display: true, text: key } } } }
+                 scales: { x: { ticks: { maxRotation: 0, autoSkipPadding: 24, callback: netseerChart.timeTick } },
+                           y: { beginAtZero: true, title: { display: true, text: key } } } }
     });
     form.addEventListener("submit", async e => {
       e.preventDefault();
@@ -140,39 +141,47 @@
       chart.data.datasets[0].data = fresh.map(p => p[key]);
       chart.update();
       form.closest(".card").querySelector(".js-bin-label").textContent = m;
+      form.closest(".card").querySelector(".js-bin-unit").textContent = m === 1 ? "minute" : "minutes";
     });
   });
 
   const mix = {{ mix | tojson }};
-  const mixCanvas = document.getElementById("mix-chart");
-  if (mixCanvas) {
+  const list = document.getElementById("mix-list");
+  if (list) {
     const SEV = {1: "High", 2: "Medium", 3: "Low", 4: "Info"};
     const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `[${key}] ${SEV[key] || ""}`.trim() : key);
-    const truncate = name => name.length > 28 ? name.slice(0, 27) + "…" : name;
-    const chart = new Chart(mixCanvas, {
-      type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: accent }] },
-      options: { indexAxis: "y", maintainAspectRatio: false,
-                 plugins: { legend: { display: false },
-                            tooltip: { callbacks: { title: items => items.length ? items[0].label : "",
-                                                     label: c => ` ${c.raw.toFixed(1)}% (${c.dataset.counts[c.dataIndex]} alerts)` } } },
-                 scales: { x: { beginAtZero: true, title: { display: true, text: "Share of alerts" },
-                                ticks: { callback: v => `${v}%` } },
-                           y: { ticks: { callback: function (value) {
-                                  const name = this.getLabelForValue(value);
-                                  const share = this.chart.data.datasets[0].data[value];
-                                  return `${truncate(name)} — ${share.toFixed(1)}%`;
-                                } } } } }
-    });
     const show = kind => {
-      const items = mix[kind].map(m => ({ label: label(kind, m.key), share: m.share * 100, count: m.count }));
-      chart.data.labels = items.map(m => m.label);
-      const ds = chart.data.datasets[0];
-      ds.data = items.map(m => m.share);
-      ds.counts = items.map(m => m.count);
-      document.getElementById("mix-box").style.height = Math.max(160, items.length * 30 + 44) + "px";
-      chart.resize();
-      chart.update();
-      document.querySelectorAll("[data-mix]").forEach(b => b.classList.toggle("primary", b.dataset.mix === kind));
+      list.replaceChildren();
+      for (const m of mix[kind]) {
+        const name = label(kind, m.key);
+        const share = (m.share * 100).toFixed(1);
+        const count = m.count.toLocaleString();
+        const row = document.createElement("div");
+        row.className = "mix-row";
+        row.title = `${name}: ${count} alerts`;
+        const head = document.createElement("div");
+        head.className = "mix-head";
+        const nameEl = document.createElement("span");
+        nameEl.className = "mix-name";
+        nameEl.textContent = name;
+        const shareEl = document.createElement("span");
+        shareEl.className = "mix-share";
+        shareEl.textContent = `${share}% · ${count}`;
+        head.append(nameEl, shareEl);
+        const track = document.createElement("div");
+        track.className = "mix-track";
+        const fill = document.createElement("div");
+        fill.className = "mix-fill";
+        fill.style.width = `${share}%`;
+        track.append(fill);
+        row.append(head, track);
+        list.append(row);
+      }
+      document.querySelectorAll("[data-mix]").forEach(b => {
+        const active = b.dataset.mix === kind;
+        b.classList.toggle("primary", active);
+        b.setAttribute("aria-pressed", String(active));
+      });
     };
     document.querySelectorAll("[data-mix]").forEach(b => b.addEventListener("click", () => show(b.dataset.mix)));
     show("classtype");

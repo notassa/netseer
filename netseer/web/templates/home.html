@@ -7,21 +7,21 @@
 <div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
 {% else %}
 <div class="card">
-  <h2 style="margin-top:0">Analysis</h2>
+  <h2>Analysis</h2>
   <p><strong>{{ analysis.name }}</strong> <span class="badge {{ analysis.status | status_class }}">{{ analysis.status | replace('_', ' ') }}</span></p>
   <div class="stats">
-    <div class="stat"><div class="value">{{ analysis.n_events }}</div><div class="label">Events</div></div>
-    <div class="stat"><div class="value">{{ counts.alerts }}</div><div class="label">Alerts</div></div>
+    <div class="stat"><div class="value">{{ "{:,}".format(analysis.n_events) }}</div><div class="label">Events</div></div>
+    <div class="stat"><div class="value">{{ "{:,}".format(counts.alerts) }}</div><div class="label">Alerts</div></div>
     <div class="stat"><div class="value">{{ total_traffic[0] }}</div><div class="label">{{ total_traffic[1] }}</div></div>
-    <div class="stat"><div class="value">{{ counts.incidents }}</div><div class="label">Possible incidents</div></div>
-    <div class="stat"><div class="value">{{ counts.devices }}</div><div class="label">Devices</div></div>
+    <div class="stat"><div class="value">{{ "{:,}".format(counts.incidents) }}</div><div class="label">Possible incidents</div></div>
+    <div class="stat"><div class="value">{{ "{:,}".format(counts.devices) }}</div><div class="label">Devices</div></div>
   </div>
-  {% if analysis.error %}<p class="muted" style="margin-bottom:0">{{ analysis.error }}</p>{% endif %}
+  {% if analysis.error %}<p class="muted mb-0">{{ analysis.error }}</p>{% endif %}
 </div>
 
 <div class="grid">
   <div class="card">
-    <h2 style="margin-top:0">Network health</h2>
+    <h2>Network health</h2>
     <div class="gauge"><canvas id="health-gauge"></canvas>
       <div class="reading"><strong>{{ net.health }}</strong><span class="band {{ health_label | lower }}">{{ 100 - net.health }}% risk · {{ health_label }}</span></div>
     </div>
@@ -45,17 +45,17 @@
     </ul>
   </div>
   <div class="card">
-    <h2 style="margin-top:0">Traffic Volume</h2>
+    <h2>Traffic Volume</h2>
     {% if traffic.points %}
-    <div class="row-actions" style="margin-bottom:.5rem;align-items:center">
+    <div class="row-actions row-center mb-2">
       <button type="button" class="btn small primary" id="traffic-mode-ie" aria-pressed="true">Ingress-Egress</button>
       <button type="button" class="btn small" id="traffic-mode-total" aria-pressed="false">Total</button>
-      <label for="traffic-bin" style="margin:0">Bin size (seconds)</label>
-      <input id="traffic-bin" type="number" min="5" max="3600" step="5" value="{{ traffic.seconds }}" style="width:7rem">
+      <label for="traffic-bin" class="m-0">Bin size (seconds)</label>
+      <input id="traffic-bin" type="number" min="5" max="3600" step="5" value="{{ traffic.seconds }}" class="input-num">
       <button type="button" class="btn small" id="traffic-bin-reset">Reset</button>
       <span class="muted" id="traffic-bin-note" role="status"></span>
     </div>
-      <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
+      <div class="chart-box"><canvas id="traffic-chart"></canvas></div>
     {% elif traffic.needs_reanalysis %}
       <p class="muted">Re-analyse this analysis to see traffic volume.</p>
     {% else %}
@@ -66,7 +66,7 @@
 
 <div class="grid">
   <div class="card">
-    <h2 style="margin-top:0">Devices at risk</h2>
+    <h2>Devices at risk</h2>
     <ul class="list-plain">
     {% for d in at_risk %}
       <li><span class="band {{ d.label | lower }}">{{ '%.0f' | format(100 * d.risk) }}%</span> {{ d.ip }}
@@ -77,7 +77,7 @@
     </ul>
   </div>
   <div class="card">
-    <h2 style="margin-top:0">Top incidents</h2>
+    <h2>Top incidents</h2>
     <ul class="list-plain">
     {% for i in top_incidents %}
       <li>{{ band_chip(i.band) }} <a href="/incidents/{{ i.id }}">{{ i.title }}</a><br>
@@ -86,9 +86,9 @@
       <li class="muted">No possible incidents in this analysis.</li>
     {% endfor %}
     </ul>
-    {% if counts.incidents > 5 %}<p style="margin-bottom:0"><a href="/incidents">All {{ counts.incidents }} incidents →</a></p>{% endif %}
-    <div class="row-actions" style="margin-top:.75rem">
-      {% for b, n in bands if n %}<a href="/incidents?band={{ b }}" style="text-decoration:none">{{ band_chip(b) }} <span class="muted">{{ n }}</span></a>{% endfor %}
+    {% if counts.incidents > 5 %}<p class="mb-0"><a href="/incidents">All {{ counts.incidents }} incidents →</a></p>{% endif %}
+    <div class="row-actions mt-3">
+      {% for b, n in bands if n %}<a href="/incidents?band={{ b }}" class="no-underline">{{ band_chip(b) }} <span class="muted">{{ n }}</span></a>{% endfor %}
     </div>
   </div>
 </div>
@@ -102,7 +102,7 @@
 (function () {
   const css = getComputedStyle(document.documentElement);
   const v = n => css.getPropertyValue(n).trim();
-  Chart.defaults.color = v("--muted"); Chart.defaults.borderColor = v("--border");
+  netseerChart.theme();
   const health = {{ net.health }};
   new Chart(document.getElementById("health-gauge"), {
     type: "doughnut",
@@ -159,10 +159,7 @@
                  interaction: { mode: "index", intersect: false },
                  plugins: { legend: { display: true },
                             tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
-                 scales: { x: { ticks: { maxRotation: 0, autoSkipPadding: 24, callback(v) {   // full date stays in the tooltip
-                                const t = this.getLabelForValue(v), all = this.chart.data.labels;
-                                return all[0].slice(0, 10) === all[all.length - 1].slice(0, 10) ? t.slice(11) : t.slice(5);
-                              } } },
+                 scales: { x: { ticks: { maxRotation: 0, autoSkipPadding: 24, callback: netseerChart.timeTick } },
                             y: { stacked: false, title: { display: true, text: `${unitWord} per ${binLabel(seconds)}` },
                                 ticks: { precision: 0, callback: fmt } } } },
     });
