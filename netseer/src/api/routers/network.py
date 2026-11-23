@@ -72,6 +72,7 @@ class UploadRequest(BaseModel):
     name: str = Field(max_length=255)
     size: int = Field(ge=0)
     analysis_id: int | None = None          # add to this existing session; None = new session
+    session_name: str | None = Field(default=None, max_length=MAX_NAME_LEN)
 
 
 class StartRequest(BaseModel):
@@ -88,7 +89,7 @@ def begin_upload(body: UploadRequest, request: Request, admin=Depends(require_ad
     """Step 1: announce one file (name, size) for a new or existing session; checks the cap and free disk."""
     try:
         analysis_id = ingest.begin_upload(conn, request.app.state.data_dir, body.name, body.size,
-                                          _max_file_bytes(conn), body.analysis_id)
+                                          _max_file_bytes(conn), body.analysis_id, body.session_name)
     except ingest.IngestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     audit(conn, admin["id"], "upload_started",

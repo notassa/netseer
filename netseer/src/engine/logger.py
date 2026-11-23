@@ -67,6 +67,19 @@ def is_internal(ip: str | None, nets: list[IPNetwork]) -> bool:
     return any(addr in net for net in nets if net.version == addr.version)
 
 
+def _on_lan(ip: str | None, nets: list[IPNetwork]) -> bool:
+    """Link-local, multicast and broadcast traffic never leaves the LAN, so it is not egress."""
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr.is_link_local or addr.is_multicast or addr.is_unspecified or str(addr) == "255.255.255.255":
+        return True
+    return any(addr in net for net in nets if net.version == addr.version)
+
+
 def direction(src: str | None, dest: str | None, nets: list[IPNetwork]) -> str | None:
     """Traffic direction relative to the LAN: ext->int, int->ext, int->int or ext->ext."""
     if not src or not dest:
@@ -293,10 +306,25 @@ class EveLogger:
         if start:
             packets = int(flow.get("pkts_toserver") or 0) + int(flow.get("pkts_toclient") or 0)
             nbytes = int(flow.get("bytes_toserver") or 0) + int(flow.get("bytes_toclient") or 0)
-            for minute, p, b in spread_minutes(start, to_utc(flow.get("end")) or start, packets, nbytes):
-                bucket = self._packets.setdefault(minute, [0, 0])
+            end = to_utc(flow.get("end")) or start
+            for minute, p, b in spread_minutes(start, end, packets, nbytes):
+                bucket = self._packets.setdefault(minute, [0] * 8)
                 bucket[0] += p
                 bucket[1] += b
+            src, dest = event.get("src_ip"), event.get("dest_ip")
+            # Split by packet direction, not by who opened the flow: leg 1 is src->dest, leg 2 is dest->src.
+            for frm, to, p, b in ((src, dest, int(flow.get("pkts_toserver") or 0), int(flow.get("bytes_toserver") or 0)),
+                                  (dest, src, int(flow.get("pkts_toclient") or 0), int(flow.get("bytes_toclient") or 0))):
+                if not (p or b):
+                    continue
+                kind = (_on_lan(frm, self.nets), _on_lan(to, self.nets))
+                idx = 2 if kind == (True, True) else 4 if kind == (True, False) else 6 if kind == (False, True) else None
+                if idx is None:
+                    continue
+                for minute, mp, mb in spread_minutes(start, end, p, b):
+                    bucket = self._packets.setdefault(minute, [0] * 8)
+                    bucket[idx] += mp
+                    bucket[idx + 1] += mb
         server = self._host(event.get("dest_ip"))
         if server is None:
             return
@@ -368,12 +396,17 @@ class EveLogger:
                 continue
             mac = host.macs.most_common(1)[0][0] if host.macs else None
             self._upsert_device(conn, ip, host, mac)
-        for minute, (packets, nbytes) in self._packets.items():
+        for minute, bucket in self._packets.items():
+            packets, nbytes, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b = bucket
             conn.execute(
-                "INSERT INTO packet_stats(analysis_id, minute, packets, bytes) VALUES (?, ?, ?, ?) "
+                "INSERT INTO packet_stats(analysis_id, minute, packets, bytes, ii_packets, ii_bytes, ie_packets, "
+                "ie_bytes, ei_packets, ei_bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(analysis_id, minute) DO UPDATE SET packets = packets + excluded.packets, "
-                "bytes = bytes + excluded.bytes",
-                (self.analysis_id, minute, packets, nbytes),
+                "bytes = bytes + excluded.bytes, ii_packets = ii_packets + excluded.ii_packets, "
+                "ii_bytes = ii_bytes + excluded.ii_bytes, ie_packets = ie_packets + excluded.ie_packets, "
+                "ie_bytes = ie_bytes + excluded.ie_bytes, ei_packets = ei_packets + excluded.ei_packets, "
+                "ei_bytes = ei_bytes + excluded.ei_bytes",
+                (self.analysis_id, minute, packets, nbytes, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b),
             )
         for ip, ext in self._externals.items():
             hostname = ext.names.most_common(1)[0][0] if ext.names else self._dns_names.get(ip)

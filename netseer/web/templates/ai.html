@@ -24,6 +24,35 @@
     <a class="btn small {{ 'primary' if key == intent }}" href="/ai?incident={{ inc.id }}&intent={{ key }}">{{ label }}</a>
     {% endfor %}
   </div>
+  <details id="prompt-section" style="margin-top:.75rem">
+    <summary>Prompt</summary>
+    <label for="prompt-text">Prompt sent to the AI for this button</label>
+    <textarea id="prompt-text" readonly rows="12" style="width:100%;box-sizing:border-box">{{ prompt_text }}</textarea>
+    <div class="field-hint">Contains IP addresses and hostnames from this analysis. Pasting it into an outside AI service sends them off this network.</div>
+    <p class="row-actions" style="align-items:center"><button class="btn small" type="button" id="prompt-copy">Copy prompt</button> <span class="muted" id="prompt-copy-status" role="status"></span></p>
+  </details>
+  <script>
+  (function () {
+    const section = document.getElementById("prompt-section");
+    const status = document.getElementById("prompt-copy-status");
+    try { if (localStorage.getItem("netseer.aiPrompt") === "1") section.open = true; } catch (e) { /* storage off */ }
+    section.addEventListener("toggle", () => {
+      try { localStorage.setItem("netseer.aiPrompt", section.open ? "1" : "0"); } catch (e) { /* storage off */ }
+    });
+    document.getElementById("prompt-copy").addEventListener("click", async () => {
+      const t = document.getElementById("prompt-text");
+      t.focus(); t.select();
+      let ok = false;
+      if (navigator.clipboard) {
+        try { await navigator.clipboard.writeText(t.value); ok = true; }
+        catch (e) { ok = document.execCommand("copy"); }
+      } else {
+        ok = document.execCommand("copy");
+      }
+      status.textContent = ok ? "Copied." : "Press Ctrl+C to copy.";
+    });
+  })();
+  </script>
 </div>
 
 {% if result %}

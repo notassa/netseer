@@ -1,4 +1,4 @@
-"""Home page (CONCEPTS A10): network health gauge, top incidents, devices at risk, alert trend, analysis status."""
+"""Home page (CONCEPTS A10): network health gauge, top incidents, devices at risk, traffic rate, analysis status."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import sqlite3
 from fastapi import APIRouter, Depends, Request
 
 from netseer.src.api.deps import get_db, layout_context, render, require_user
+from netseer.src.api.routers.alerts import TRAFFIC_BINS, default_traffic_bin, traffic_series
 from netseer.src.api.routers.incidents import incident_rows
+from netseer.src.config import get_setting
 from netseer.src.engine.acp import ensure_acp
 from netseer.src.engine.constants import BANDS, DEVICE_TYPE_LABEL
 from netseer.src.engine.scorer import device_bands, network_health, risk_label
@@ -39,8 +41,6 @@ def home(request: Request, conn: sqlite3.Connection = Depends(get_db)):
                for d in conn.execute("SELECT ip, hostname, type, risk FROM devices WHERE analysis_id = ? "
                                      "ORDER BY risk DESC", (aid,))
                if device_band.get(d["ip"]) in ("Critical", "High", "Medium")]
-    trend = conn.execute("SELECT substr(ts, 1, 13) AS hour, COUNT(*) AS n FROM alerts WHERE analysis_id = ? "
-                         "GROUP BY hour ORDER BY hour", (aid,)).fetchall()
     analysis = conn.execute("SELECT * FROM analyses WHERE id = ?", (aid,)).fetchone()
     return render(request, "home.html", {
         **ctx,
@@ -48,7 +48,9 @@ def home(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         "health_label": risk_label(100 - net["health"]),
         "top_incidents": incident_rows(conn, aid, limit=5),
         "at_risk": at_risk,
-        "trend": [{"t": r["hour"].replace("T", " ") + ":00", "n": r["n"]} for r in trend],
+        "traffic": traffic_series(conn, aid, default_traffic_bin(conn, aid)),
+        "traffic_bins": TRAFFIC_BINS,
+        "data_unit": get_setting(conn, "data_unit"),
         "counts": counts,
         "bands": [(b, bands.get(b, 0)) for b in BANDS],
         "analysis": analysis,

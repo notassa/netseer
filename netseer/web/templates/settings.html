@@ -99,6 +99,12 @@
       Look up unknown MAC vendors online</label>
     <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
       (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
+    <h3>Data Representation</h3>
+    <label for="cfg-data-unit">Traffic Rate unit</label>
+    <select id="cfg-data-unit" name="data_unit" style="width:10rem">
+      {% for key, label in data_units.items() %}<option value="{{ key }}" {{ 'selected' if config.data_unit == key }}>{{ label }}</option>{% endfor %}
+    </select>
+    <div class="field-hint">Applies to the Traffic Rate chart on Home.</div>
     <p><button class="btn primary" type="submit">Save configuration</button></p>
   </form>
   <p class="muted" style="margin-bottom:0">Still to come: data retention (cutover). Rules update is under Rules &amp; knowledge base.</p>

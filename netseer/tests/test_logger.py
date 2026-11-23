@@ -77,6 +77,53 @@ def test_packet_stats_per_minute(processed):
     assert (a["n_events"], a["n_alerts"]) == (17, 4)
 
 
+def test_packet_stats_split_by_direction(tmp_path):
+    path = tmp_path / "d.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    eve = tmp_path / "eve.json"
+    flows = [
+        # INT->EXT: leg 1 (src->dest) is egress, leg 2 (dest->src) is ingress.
+        {"event_type": "flow", "src_ip": "192.168.1.5", "dest_ip": "8.8.8.8", "proto": "TCP", "dest_port": 443,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 3, "pkts_toclient": 2,
+                  "bytes_toserver": 300, "bytes_toclient": 200}},
+        # INT->multicast never leaves the LAN, so it counts as INT>INT.
+        {"event_type": "flow", "src_ip": "192.168.1.5", "dest_ip": "224.0.0.251", "proto": "UDP", "dest_port": 5353,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 5, "pkts_toclient": 0,
+                  "bytes_toserver": 500, "bytes_toclient": 0}},
+        # EXT->EXT adds to the totals but to no direction column.
+        {"event_type": "flow", "src_ip": "8.8.8.8", "dest_ip": "1.1.1.1", "proto": "TCP", "dest_port": 443,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 7, "pkts_toclient": 0,
+                  "bytes_toserver": 700, "bytes_toclient": 0}},
+    ]
+    eve.write_text("\n".join(map(json.dumps, flows)))
+    logger.process_eve_file(conn, 1, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
+    row = conn.execute("SELECT * FROM packet_stats WHERE minute = '2026-10-21T10:00'").fetchone()
+    assert (row["packets"], row["bytes"]) == (17, 1700)
+    assert (row["ii_packets"], row["ii_bytes"]) == (5, 500)
+    assert (row["ie_packets"], row["ie_bytes"]) == (3, 300)
+    assert (row["ei_packets"], row["ei_bytes"]) == (2, 200)
+
+
+def test_migration_adds_packet_stats_direction_columns(tmp_path):
+    path = tmp_path / "m.db"
+    conn = db.connect(path)
+    conn.execute("CREATE TABLE packet_stats (analysis_id INTEGER NOT NULL, minute TEXT NOT NULL, "
+                 "packets INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0, "
+                 "PRIMARY KEY (analysis_id, minute))")
+    conn.execute("INSERT INTO packet_stats(analysis_id, minute, packets, bytes) VALUES (1, '2026-10-21T10:00', 5, 500)")
+    conn.close()
+    db.init_db(path)
+    conn = db.connect(path)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(packet_stats)")}
+    for col in ("ii_packets", "ii_bytes", "ie_packets", "ie_bytes", "ei_packets", "ei_bytes"):
+        assert col in cols
+    row = conn.execute("SELECT * FROM packet_stats").fetchone()
+    assert (row["packets"], row["bytes"]) == (5, 500)
+    conn.close()
+
+
 def test_reprocessing_merges_devices_instead_of_duplicating(processed):
     conn, _ = processed
     logger.process_eve_file(conn, 1, FIXTURE, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
@@ -192,3 +239,10 @@ def test_ip_names_are_remembered_across_analyses(tmp_path):
         logger.process_eve_file(conn, aid, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
     assert conn.execute("SELECT name FROM ip_names WHERE ip = '93.184.216.34'").fetchone()[0] == "example.com"
     assert conn.execute("SELECT hostname FROM external_hosts WHERE analysis_id = 2").fetchone()[0] == "example.com"
+
+
+def test_link_local_traffic_counts_as_on_the_lan():
+    from netseer.src.engine.logger import _on_lan, parse_networks
+    nets = parse_networks(["192.168.0.0/16"])
+    assert _on_lan("fe80::1", nets) and _on_lan("169.254.10.1", nets) and _on_lan("ff02::fb", nets)
+    assert not _on_lan("8.8.8.8", nets) and not _on_lan("2001:4860:4860::8888", nets)

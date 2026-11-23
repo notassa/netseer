@@ -146,6 +146,17 @@ def test_ai_page_shows_explanation_with_badge_and_flags(incident):
     assert client.get(f"/api/incidents/{inc['id']}/explain?intent=explain_simple").json()["state"] == "done"
 
 
+def test_ai_page_shows_prompt_for_the_selected_intent(incident):
+    client, conn, inc = incident
+    before = conn.execute("SELECT COUNT(*) FROM interpretations").fetchone()[0]
+    page = client.get(f"/ai?incident={inc['id']}&intent=what_to_do")
+    assert page.status_code == 200
+    assert 'id="prompt-text"' in page.text
+    assert "Focus on recommended_actions" in page.text
+    assert "Evidence package:" in page.text
+    assert conn.execute("SELECT COUNT(*) FROM interpretations").fetchone()[0] == before
+
+
 def test_saved_explanations_stay_listed_and_open_after_the_evidence_changes(incident):
     client, conn, inc = incident
     ev = prompt_maker.build_evidence(conn, inc["id"])

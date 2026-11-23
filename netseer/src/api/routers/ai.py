@@ -8,7 +8,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from markupsafe import Markup, escape
 
-from netseer.ai import explain
+from netseer.ai import explain, prompt_maker
 from netseer.ai.prompt_maker import INTENTS
 from netseer.ai.verifier import SENTENCE
 from netseer.src.api.client import who
@@ -71,8 +71,11 @@ def ai_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
                            "LIMIT ?", (inc["analysis_id"] if inc else -1, INCIDENT_CHOICES)).fetchall()
     result = None
     state = {"state": "none"}
+    prompt_text = ""
     if inc is not None:
         state = explain.status(conn, inc["id"], intent)
+        system, user = prompt_maker.messages(explain.evidence_for(conn, inc["id"], intent), intent)
+        prompt_text = f"SYSTEM:\n{system}\n\nUSER:\n{user}"
         row = saved or (conn.execute("SELECT * FROM interpretations WHERE id = ?", (state["interpretation"],)).fetchone()
                         if state["state"] == "done" else None)
         if row is not None:
@@ -91,6 +94,7 @@ def ai_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
     return render(request, "ai.html", {
         **ctx, "inc": inc, "intent": intent, "intents": INTENTS, "choices": choices, "state": state,
         "result": result, "history": history, "sections": SECTIONS, "marked": marked, "check_names": CHECK_NAMES,
+        "prompt_text": prompt_text,
     })
 
 

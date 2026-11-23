@@ -64,7 +64,7 @@ def conn(tmp_path):
 
 def test_silent_stretch_inside_the_capture(conn):
     for m in ("09:00", "09:01", "09:02", "09:11", "09:12", "09:14"):
-        conn.execute("INSERT INTO packet_stats VALUES (1, ?, 5, 500)", (f"2026-10-21T{m}",))
+        conn.execute("INSERT INTO packet_stats(analysis_id, minute, packets, bytes) VALUES (1, ?, 5, 500)", (f"2026-10-21T{m}",))
     found = cc.silent_stretches(conn, 1)
     assert titles(found) == ["No traffic for 8 min (2026-10-21 09:03 to 09:11 UTC) inside the capture: the network "
                              "was quiet or the capture paused"]

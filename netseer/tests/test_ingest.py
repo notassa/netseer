@@ -249,6 +249,25 @@ def test_restart_fails_uploading_and_running_jobs(conn, tmp_path):
     assert conn.execute("SELECT action FROM audit_log").fetchone()[0] == "analysis_interrupted"
 
 
+def test_begin_upload_session_name_is_trimmed(conn, tmp_path):
+    aid = ingest.begin_upload(conn, tmp_path / "data", "a.pcap", 10, 1 << 30, session_name="  Lab   run ")
+    assert conn.execute("SELECT name FROM analyses WHERE id = ?", (aid,)).fetchone()[0] == "Lab run"
+
+
+def test_begin_upload_blank_session_name_falls_back_to_auto_name(conn, tmp_path):
+    aid = ingest.begin_upload(conn, tmp_path / "data", "a.pcap", 10, 1 << 30, session_name="   ")
+    name = conn.execute("SELECT name FROM analyses WHERE id = ?", (aid,)).fetchone()[0]
+    assert name and name.strip()
+
+
+def test_begin_upload_session_name_ignored_when_adding_to_session(conn, tmp_path):
+    aid = ingest.begin_upload(conn, tmp_path / "data", "a.pcap", 10, 1 << 30)
+    conn.execute("UPDATE analyses SET status = 'pending' WHERE id = ?", (aid,))
+    before = conn.execute("SELECT name FROM analyses WHERE id = ?", (aid,)).fetchone()[0]
+    ingest.begin_upload(conn, tmp_path / "data", "b.pcap", 10, 1 << 30, aid, session_name="Renamed")
+    assert conn.execute("SELECT name FROM analyses WHERE id = ?", (aid,)).fetchone()[0] == before
+
+
 def test_read_position_follows_an_open_file(tmp_path):
     path = tmp_path / "f.bin"
     path.write_bytes(b"x" * 10000)

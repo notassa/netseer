@@ -126,10 +126,12 @@ def get_progress(analysis_id: int) -> dict | None:
 
 
 def begin_upload(conn: sqlite3.Connection, data_dir: Path, name: str, size: int, max_file_bytes: int,
-                 analysis_id: int | None = None) -> int:
+                 analysis_id: int | None = None, session_name: str | None = None) -> int:
     """Open a one-file upload into a new session or an existing offline session; return the analysis id.
 
-    Checks the per-file cap and free disk. The analysis stays `uploading` until `finish_upload`.
+    Checks the per-file cap and free disk. For a new session, `session_name` (if any) becomes its name;
+    otherwise the auto name from the first file. `session_name` is ignored when adding to a session.
+    The analysis stays `uploading` until `finish_upload`.
     """
     if size > max_file_bytes:
         raise IngestError(f"{Path(name).name} is larger than the {max_file_bytes // (1 << 20)} MB per-file limit.")
@@ -141,8 +143,9 @@ def begin_upload(conn: sqlite3.Connection, data_dir: Path, name: str, size: int,
                           f"{size * factor / (1 << 30):.1f} GB needed. Delete old analyses first.")
     stored = safe_filename(name)
     if analysis_id is None:
+        new_name = " ".join((session_name or "").split()) or auto_name([stored], datetime.now())
         cur = conn.execute("INSERT INTO analyses(name, mode, status, created_at) VALUES (?, 'offline', 'uploading', ?)",
-                           (auto_name([stored], datetime.now()), db.utcnow()))
+                           (new_name, db.utcnow()))
         analysis_id, previous = int(cur.lastrowid), None
     else:
         row = conn.execute("SELECT mode, status FROM analyses WHERE id = ?", (analysis_id,)).fetchone()

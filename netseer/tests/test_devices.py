@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -182,3 +183,29 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
         ["id", "time", "severity", "signature", "class", "direction", "src", "dest", "proto"]
     heads = set(re.findall(r"<th[^>]*>([^<{]+)</th>", page))
     assert heads and heads <= set(COLUMN_HELP), heads - set(COLUMN_HELP)     # every alerts-page column is explained
+
+
+def test_traffic_api_bin_validation(analysed):
+    client, _ = analysed
+    assert client.get("/api/analyses/1/traffic?minutes=7").status_code == 400
+    data = client.get("/api/analyses/1/traffic?minutes=5").json()
+    assert data["has_split"] is True and data["points"]
+
+
+def test_home_shows_traffic_rate_not_alert_trend(analysed):
+    client, _ = analysed
+    page = client.get("/").text
+    assert "Traffic Rate" in page and "Alert trend" not in page
+
+
+def test_data_unit_setting_persists_and_invalid_refused(analysed):
+    client, conn = analysed
+    form = {"csrf_token": csrf(client, "/settings"), "aggregation_gap_s": "300", "correlation_window_min": "30",
+            "half_life_days": "7", "max_upload_mb": "2048", "live_interval_s": "30", "inside_rules": "on",
+            "lan_cidrs": "192.168.100.0/24", "data_unit": "packet"}
+    assert client.post("/settings/config", data=form).status_code == 303
+    stored = lambda: json.loads(conn.execute("SELECT value FROM settings WHERE key = 'data_unit'").fetchone()[0])
+    assert stored() == "packet"
+    form["data_unit"] = "bananas"
+    client.post("/settings/config", data=form)
+    assert stored() == "packet"

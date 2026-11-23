@@ -105,7 +105,7 @@ incidents(id PK, analysis_id, title, rule, src_ips_json, dest_ips_json, first_se
           likelihood REAL, impact REAL, band, score REAL, factors_json, evidence_json)
 incident_groups(incident_id, group_id)
 interpretations(id PK, incident_id, intent, model, evidence_hash, output_json, verification_json, created_at, latency_s)
-packet_stats(analysis_id, minute, packets, bytes)            -- per minute; flows spread over their duration
+packet_stats(analysis_id, minute, packets, bytes, ii_packets, ii_bytes, ie_packets, ie_bytes, ei_packets, ei_bytes)  -- per minute; flows spread over their duration; ii = INT>INT, ie = INT>EXT, ei = EXT>INT
 external_hosts(id PK, analysis_id, ip, hostname, direction, first_seen, last_seen, n_flows, n_alerts, bytes,
                ports_json, peers_json, UNIQUE(analysis_id, ip))
 ti_cache(indicator PK, source, result_json, fetched_at)
@@ -134,7 +134,7 @@ Index every `analysis_id` column. All pages read through `analysis_id`.
      - `vendor` from the OUI in `/usr/share/ieee-data/oui.csv`
      - `hostname` from `dhcp.hostname`
      - `services` from flows where the device is the destination
-   - `flow` → `packet_stats` per hour.
+   - `flow` → `packet_stats` per minute, total and by packet direction.
    - Missing values stay NULL and display as **unknown**.
    - Then network discovery (A17). If the looks-local networks hold more hosts than the devices, store them as the analysis's LAN (`settings` key `lan_cidrs:<id>`), clear the results and run Suricata + logger once more (HOME_NET and directions use the analysis's LAN everywhere).
 3. After ACP, set `awaiting_attribution`. The UI shows the Device Attribution modal for unattributed devices; saving it (or "skip, keep Unknown") moves the analysis to `done`.
@@ -231,12 +231,12 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 | Page | Must show | Cycle |
 |---|---|---|
 | Setup / Login | First launch: "Create administrator". Otherwise username + password, lockout message | C1 |
-| Network | Mode choice (Offline / Real-time); one-file upload into a session + job progress; analyses browser (open, rename, files, **Info** capture checks (A16), re-analyse, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop | C1 / C4 |
+| Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses browser (open, rename, files, **Info** capture checks (A16), re-analyse, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop | C1 / C4 |
 | Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17); long service lists fold behind "+N more" | C1–C2 |
 | Alerts | Packets per *x* minutes line chart (Update button), **"Detected Alert Classes"** pie chart, filterable table (Alert ID, Time, Severity [1] High…[4] Info, Signature, Class, Direction, Source, Destination, Proto), raw-JSON drawer | C1 |
 | Incidents | Table: Incident ID, band chip, score, title, rule, hosts, span, count. Detail: group timeline (Gantt of group spans, scrollable, steps of 1/5/10/20/40/60 min), **factor breakdown table** (factor, value, why, evidence), raw alerts, "Explain with AI" | C2 |
-| Home | Analysis status card on top, then health gauge + top 3 contributing devices, top 5 incidents, devices at risk, alert trend | C2 |
-| AI | Sectioned explanation, Prompt Maker buttons, verifier badge, flagged sentences highlighted, ref chips that expand to the evidence; **Saved explanations** list (every generated explanation stays re-openable) | C3 |
+| Home | Analysis status card on top, then health gauge + top 3 contributing devices, top 5 incidents, devices at risk, Traffic Rate (Ingress-Egress / Total) | C2 |
+| AI | Sectioned explanation, Prompt Maker buttons, Prompt section (view + copy), verifier badge, flagged sentences highlighted, ref chips that expand to the evidence; **Saved explanations** list (every generated explanation stays re-openable) | C3 |
 | Information | Admin only: Account activity (time, user, event, IP, MAC, vendor) and Process log (time, level, event, analysis, detail); **Clear log** per tab | C1 |
 | Settings | One tab per section: Theme (all); Accounts, Configuration, AI (backend + API keys), Knowledge base, MAC vendors (Wireshark list update), **Detonate** factory reset (admin) | C1–C3 |
 

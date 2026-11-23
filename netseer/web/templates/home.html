@@ -74,9 +74,23 @@
     </ul>
   </div>
   <div class="card">
-    <h2 style="margin-top:0">Alert trend</h2>
-    {% if trend %}<div class="chart-box" style="height:200px"><canvas id="trend-chart"></canvas></div>
-    {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
+    <h2 style="margin-top:0">Traffic Rate</h2>
+    {% if traffic.points %}
+      {% if traffic.has_split %}
+    <div class="row-actions" style="margin-bottom:.5rem">
+      <button type="button" class="btn small primary" id="traffic-mode-ie" aria-pressed="true">Ingress-Egress</button>
+      <button type="button" class="btn small" id="traffic-mode-total" aria-pressed="false">Total</button>
+      <select id="traffic-bin" aria-label="Time bin">
+        {% for m in traffic_bins %}<option value="{{ m }}" {{ 'selected' if m == traffic.minutes }}>{{ m }} min</option>{% endfor %}
+      </select>
+    </div>
+      <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
+      {% else %}
+      <p class="muted">Re-analyse this analysis to see traffic by direction.</p>
+      {% endif %}
+    {% else %}
+      <p class="muted">No traffic in this analysis.</p>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -98,13 +112,88 @@
     options: { rotation: -90, circumference: 180, cutout: "72%", maintainAspectRatio: false,
                plugins: { legend: { display: false }, tooltip: { enabled: false } } }
   });
-  const trend = {{ trend | tojson }};
-  if (trend.length) {
-    new Chart(document.getElementById("trend-chart"), {
-      type: "bar",
-      data: { labels: trend.map(t => t.t), datasets: [{ label: "Alerts", data: trend.map(t => t.n), backgroundColor: v("--accent") }] },
-      options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
-                 scales: { y: { beginAtZero: true, title: { display: true, text: "alerts per hour" } } } }
+  const traffic = {{ traffic | tojson }};
+  const dataUnit = "{{ data_unit }}";
+  const unitLabel = dataUnit === "packet" ? "pkt/s" : (dataUnit === "bit" ? "b/s" : "B/s");
+  let minutes = traffic.minutes;
+
+  function fmt(v) {
+    const a = Math.abs(v);
+    if (dataUnit === "packet") return a.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " pkt/s";
+    const units = dataUnit === "bit" ? ["b/s", "kb/s", "Mb/s", "Gb/s"] : ["B/s", "KB/s", "MB/s", "GB/s"];
+    if (a === 0) return "0 " + units[0];
+    let x = a, i = 0;
+    while (x >= 1000 && i < units.length - 1) { x /= 1000; i += 1; }
+    const digits = x >= 100 ? 0 : (x >= 10 ? 1 : 2);
+    return x.toFixed(digits) + " " + units[i];
+  }
+
+  const rate = p => {
+    const key = dataUnit === "packet" ? "packets" : "bytes";
+    const mult = dataUnit === "bit" ? 8 : 1;
+    return { ii: p["ii_" + key] * mult / (minutes * 60),
+             ie: p["ie_" + key] * mult / (minutes * 60),
+             ei: p["ei_" + key] * mult / (minutes * 60) };
+  };
+
+  const canvas = document.getElementById("traffic-chart");
+  if (canvas) {
+    const INGRESS = "#f97316", EGRESS = "#2563eb", INTERNAL = "#7c3aed";
+    const datasets = mode => mode === "total" ? [
+      { label: "INT>INT", data: traffic.points.map(p => rate(p).ii), borderColor: INTERNAL,
+        backgroundColor: INTERNAL, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+      { label: "INT>EXT", data: traffic.points.map(p => rate(p).ie), borderColor: EGRESS,
+        backgroundColor: EGRESS, fill: "-1", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+      { label: "EXT>INT", data: traffic.points.map(p => rate(p).ei), borderColor: INGRESS,
+        backgroundColor: INGRESS, fill: "-1", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+    ] : [
+      { label: "Ingress (EXT>INT)", data: traffic.points.map(p => rate(p).ei), borderColor: INGRESS,
+        backgroundColor: INGRESS, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+      { label: "Egress (INT>EXT)", data: traffic.points.map(p => -rate(p).ie), borderColor: EGRESS,
+        backgroundColor: EGRESS, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+    ];
+
+    const chart = new Chart(canvas, {
+      type: "line",
+      data: { labels: traffic.points.map(p => p.t), datasets: datasets("ie") },
+      options: { maintainAspectRatio: false,
+                 interaction: { mode: "index", intersect: false },
+                 plugins: { legend: { display: true },
+                            tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
+                 scales: { x: { ticks: { maxRotation: 0, callback(v) {   // full date stays in the tooltip
+                                const t = this.getLabelForValue(v), all = this.chart.data.labels;
+                                return all[0].slice(0, 10) === all[all.length - 1].slice(0, 10) ? t.slice(11) : t.slice(5);
+                              } } },
+                            y: { stacked: false, title: { display: true, text: unitLabel },
+                                ticks: { callback: fmt } } } },
+    });
+
+    let mode = "ie";
+    const buttons = { ie: document.getElementById("traffic-mode-ie"),
+                      total: document.getElementById("traffic-mode-total") };
+    const setMode = m => {
+      mode = m;
+      chart.data.datasets = datasets(m);
+      chart.options.scales.y.stacked = m === "total";
+      for (const key in buttons) {
+        buttons[key].classList.toggle("primary", key === m);
+        buttons[key].setAttribute("aria-pressed", String(key === m));
+      }
+      chart.update();
+    };
+    buttons.ie.addEventListener("click", () => setMode("ie"));
+    buttons.total.addEventListener("click", () => setMode("total"));
+
+    document.getElementById("traffic-bin").addEventListener("change", async e => {
+      const m = parseInt(e.target.value, 10);
+      try {
+        const fresh = await getJSON(`/api/analyses/{{ selected.id }}/traffic?minutes=${m}`);
+        minutes = fresh.minutes;
+        traffic.points = fresh.points;
+        chart.data.labels = fresh.points.map(p => p.t);
+        chart.data.datasets = datasets(mode);
+        chart.update();
+      } catch (err) { /* leave the chart unchanged on error */ }
     });
   }
 })();

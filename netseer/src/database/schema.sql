@@ -180,6 +180,12 @@ CREATE TABLE IF NOT EXISTS packet_stats (
     minute       TEXT NOT NULL,      -- YYYY-MM-DDTHH:MM (UTC); flows are spread over their duration
     packets      INTEGER NOT NULL DEFAULT 0,
     bytes        INTEGER NOT NULL DEFAULT 0,
+    ii_packets   INTEGER NOT NULL DEFAULT 0,   -- INT>INT
+    ii_bytes     INTEGER NOT NULL DEFAULT 0,
+    ie_packets   INTEGER NOT NULL DEFAULT 0,   -- INT>EXT (egress)
+    ie_bytes     INTEGER NOT NULL DEFAULT 0,
+    ei_packets   INTEGER NOT NULL DEFAULT 0,   -- EXT>INT (ingress)
+    ei_bytes     INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (analysis_id, minute)
 );
 

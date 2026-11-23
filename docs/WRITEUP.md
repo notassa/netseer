@@ -256,12 +256,12 @@ deterministic.
 | Page | What to point out |
 |---|---|
 | Setup / Login | First launch creates the admin; then `/setup` is gone. Lockout after 5 failures |
-| Network | Upload into a session (files merged; a file already uploaded or with a broken header is refused), delete single files, progress per stage, **Stop**, Re-analyse, capture checks (gaps, loss, truncation), notes |
-| Home | Health gauge and what costs it points, top incidents, devices at risk, alert trend |
+| Network | Traffic Source: upload into a named session or pick network adapters; upload into a session (files merged; a file already uploaded or with a broken header is refused), delete single files, progress per stage, **Stop**, Re-analyse, capture checks (gaps, loss, truncation), notes |
+| Home | Health gauge and what costs it points, top incidents, devices at risk, Traffic Rate (ingress/egress and stacked total) |
 | Alerts | Packets and alerts per *x* minutes (each its own bin size), top 5 devices by alerts, "Detected Alert Classes" (shares, not risk), filter frame with tick boxes, raw JSON drawer. Hover a column head to see what it holds |
 | Incidents | Ranked by band then score → detail: Attack → Victim, timeline, groups, factor table, raw alerts |
 | Devices | Inventory (MAC, vendor, hostname, services, type, risk), attribution prompt, external sources, network map |
-| AI | Explanation with the verifier badge, ref chips, progress % and Stop, saved explanations (admin can clear) |
+| AI | Explanation with the verifier badge, viewable and copyable prompt, ref chips, progress % and Stop, saved explanations (admin can clear) |
 | Information | Admin audit log (account activity and process log, with IP and MAC) and NetSeer details (the box's CPU, memory, temperatures, network cards) |
 | Settings | Theme, accounts and the auto-logout toggle, configuration (windows, half-life, LAN, inside-LAN rules), AI keys, KB rebuild, vendor list, Detonate (factory reset: password + typed word) |
 

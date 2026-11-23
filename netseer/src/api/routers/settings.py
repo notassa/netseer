@@ -37,6 +37,7 @@ CONFIG_FIELDS = {
 }
 WINDOW_KEYS = ("aggregation_gap_s", "correlation_window_min")
 AI_FIELDS = ("llm_backend", "llm_model", "cloud_url", "cloud_model")
+DATA_UNITS = {"bit": "bit (b, kb, Mb, Gb)", "byte": "byte (B, KB, MB, GB)", "packet": "packet (pkt)"}
 _kb_lock = threading.Lock()      # one knowledge-base rebuild at a time
 _oui_lock = threading.Lock()
 
@@ -56,7 +57,8 @@ def settings_page(request: Request, user=Depends(require_user), conn: sqlite3.Co
         "accounts": accounts if user["role"] == "admin" else [],
         "has_user": any(a["role"] == "user" for a in accounts),
         "config_fields": CONFIG_FIELDS,
-        "config": {key: get_setting(conn, key) for key in (*CONFIG_FIELDS, "lan_cidrs", "inside_rules", "mac_lookup_online")},
+        "config": {key: get_setting(conn, key) for key in (*CONFIG_FIELDS, "lan_cidrs", "inside_rules", "mac_lookup_online", "data_unit")},
+        "data_units": DATA_UNITS,
         "kb": _kb_status(),
         "oui": oui.manuf_info() | {"updating": _oui_lock.locked()},
         "ai": {key: get_setting(conn, key) for key in AI_FIELDS},
@@ -66,7 +68,7 @@ def settings_page(request: Request, user=Depends(require_user), conn: sqlite3.Co
     })
 
 
-def _parse_config(form) -> dict:
+def _parse_config(form, conn: sqlite3.Connection) -> dict:
     """Validate the configuration form; raises ValueError with a plain message."""
     values = {}
     for key, (label, kind, low, high, unit) in CONFIG_FIELDS.items():
@@ -77,6 +79,10 @@ def _parse_config(form) -> dict:
         if not low <= value <= high:
             raise ValueError(f"{label} must be between {low} and {high} {unit}.")
         values[key] = value
+    data_unit = form.get("data_unit", get_setting(conn, "data_unit"))
+    if data_unit not in DATA_UNITS:
+        raise ValueError("Pick a data representation.")
+    values["data_unit"] = data_unit
     values["inside_rules"] = form.get("inside_rules") == "on"
     values["mac_lookup_online"] = form.get("mac_lookup_online") == "on"
     cidrs = [c.strip() for c in str(form.get("lan_cidrs", "")).replace(",", "\n").splitlines() if c.strip()]
@@ -93,7 +99,7 @@ def _parse_config(form) -> dict:
 async def save_config(request: Request, admin=Depends(require_admin), conn: sqlite3.Connection = Depends(get_db)):
     """Save NetSeer configuration (A15); a window change re-runs ACP 3–6, a half-life change re-scores device risk."""
     try:
-        values = _parse_config(await request.form())
+        values = _parse_config(await request.form(), conn)
     except ValueError as exc:
         return redirect("/settings#tab-config", "error", str(exc))
     changed = [k for k, v in values.items() if v != get_setting(conn, k)]

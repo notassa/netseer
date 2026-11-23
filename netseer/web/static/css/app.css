@@ -233,3 +233,7 @@ pre.raw { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; ove
 details.more { display: inline; }
 details.more > summary { display: inline; cursor: pointer; color: var(--accent); font-size: 12px; }
 details.more[open] > summary { display: block; }
+
+.field-error, .field-error:focus { border-color: var(--danger) !important; outline-color: var(--danger); animation: field-flash .35s 3; }
+@keyframes field-flash { 50% { box-shadow: 0 0 0 3px var(--danger); } }
+@media (prefers-reduced-motion: reduce) { .field-error { animation: none; } }
