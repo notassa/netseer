@@ -22,6 +22,10 @@ You are a worker. Claude Code is the orchestrator: it gives you one scoped codin
 - 8 reads or searches in a row with no edit → stop and report what is missing.
 - Keep the final report short: no full file contents or long logs.
 
+## UI polish (`unslop`)
+- Load the `unslop` skill only when the brief names approved fixes, and apply only those fixes, after the brief's logic work passes its tests.
+- Never redesign a screen or change data, features, risk colors or meanings, verifier wording or "possible" language.
+
 ## Browser checks
 - Only when the brief names one, on the port it gives: `.venv/bin/python -m netseer.eval.browser_env --port <port> -- ~/.local/share/netseer-playwright/venv/bin/python -I <check.py>`.
 - Never open the real database or use port 8000. Keep check scripts out of the repo unless the brief says otherwise.

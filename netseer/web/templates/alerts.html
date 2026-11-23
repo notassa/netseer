@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "macros.html" import search_input, reset_sort, pager %}
+{% from "macros.html" import search_input, reset_sort, pager, severity_chip %}
 {% block title %}Alerts{% endblock %}
 {% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
 {% block content %}
@@ -31,7 +31,7 @@
       <button class="btn small primary" data-mix="classtype">By classtype</button>
       <button class="btn small" data-mix="priority">By severity</button>
     </div>
-    <div class="chart-box"><canvas id="mix-chart"></canvas></div>
+    <div class="mix-scroll" tabindex="0" aria-label="Alert classes, scrollable"><div class="chart-box" id="mix-box"><canvas id="mix-chart"></canvas></div></div>
     <div class="field-hint">How the alerts divide up (not risk). A large share does not mean high risk; risk is scored per incident.</div>
     {% else %}<p class="muted">No alerts in this analysis.</p>{% endif %}
   </div>
@@ -84,7 +84,7 @@
   <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
     <td>{{ a.id }}</td>
     <td>{{ a.ts[:19] | replace('T', ' ') if a.ts else '' }}</td>
-    <td>{{ unk(a.priority | severity) }}</td>
+    <td>{{ severity_chip(a.priority) }}</td>
     <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
     <td>{{ unk(a.classtype) }}</td>
     <td>{{ unk(a.direction) }}</td>
@@ -148,33 +148,29 @@
   if (mixCanvas) {
     const SEV = {1: "High", 2: "Medium", 3: "Low", 4: "Info"};
     const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `[${key}] ${SEV[key] || ""}`.trim() : key);
-    const palette = [1, 2, 3, 4, 5, 6, 7, 8].map(i => css.getPropertyValue(`--chart-${i}`).trim());
-    const SLICES = 7;                       // the rest is folded into "other" so the pie stays readable
-    const narrow = () => mixCanvas.parentElement.clientWidth < 520;
+    const truncate = name => name.length > 28 ? name.slice(0, 27) + "…" : name;
     const chart = new Chart(mixCanvas, {
-      type: "pie", data: { labels: [], datasets: [{ data: [], borderColor: css.getPropertyValue("--surface").trim() }] },
-      options: { maintainAspectRatio: false,
-                 plugins: { legend: { position: narrow() ? "bottom" : "right",
-                                      labels: { boxWidth: 12, font: { size: 11 }, generateLabels: c => Chart.overrides.pie.plugins.legend.labels
-                                        .generateLabels(c).map(item => {
-                                          const name = item.text.length > 24 ? item.text.slice(0, 23) + "…" : item.text;
-                                          return { ...item, text: `${name} — ${c.data.datasets[0].data[item.index].toFixed(1)}%` };
-                                        }) } },
-                            tooltip: { callbacks: { label: c => ` ${c.raw.toFixed(1)}% (${c.dataset.counts[c.dataIndex]} alerts)` } } },
-                 onResize: c => { c.options.plugins.legend.position = narrow() ? "bottom" : "right"; } }
+      type: "bar", data: { labels: [], datasets: [{ data: [], backgroundColor: accent }] },
+      options: { indexAxis: "y", maintainAspectRatio: false,
+                 plugins: { legend: { display: false },
+                            tooltip: { callbacks: { title: items => items.length ? items[0].label : "",
+                                                     label: c => ` ${c.raw.toFixed(1)}% (${c.dataset.counts[c.dataIndex]} alerts)` } } },
+                 scales: { x: { beginAtZero: true, title: { display: true, text: "Share of alerts" },
+                                ticks: { callback: v => `${v}%` } },
+                           y: { ticks: { callback: function (value) {
+                                  const name = this.getLabelForValue(value);
+                                  const share = this.chart.data.datasets[0].data[value];
+                                  return `${truncate(name)} — ${share.toFixed(1)}%`;
+                                } } } } }
     });
     const show = kind => {
-      let items = mix[kind].map(m => ({ label: label(kind, m.key), share: m.share * 100, count: m.count }));
-      if (items.length > SLICES + 1) {
-        const rest = items.slice(SLICES);
-        items = items.slice(0, SLICES).concat([{ label: `other (${rest.length})`,
-          share: rest.reduce((s, m) => s + m.share, 0), count: rest.reduce((s, m) => s + m.count, 0) }]);
-      }
+      const items = mix[kind].map(m => ({ label: label(kind, m.key), share: m.share * 100, count: m.count }));
       chart.data.labels = items.map(m => m.label);
       const ds = chart.data.datasets[0];
       ds.data = items.map(m => m.share);
       ds.counts = items.map(m => m.count);
-      ds.backgroundColor = items.map((m, i) => palette[i < SLICES ? i : 7]);
+      document.getElementById("mix-box").style.height = Math.max(160, items.length * 30 + 44) + "px";
+      chart.resize();
       chart.update();
       document.querySelectorAll("[data-mix]").forEach(b => b.classList.toggle("primary", b.dataset.mix === kind));
     };

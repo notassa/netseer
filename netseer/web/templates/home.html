@@ -12,7 +12,7 @@
   <div class="stats">
     <div class="stat"><div class="value">{{ analysis.n_events }}</div><div class="label">Events</div></div>
     <div class="stat"><div class="value">{{ counts.alerts }}</div><div class="label">Alerts</div></div>
-    <div class="stat"><div class="value">{{ counts.groups }}</div><div class="label">Alert groups</div></div>
+    <div class="stat"><div class="value">{{ total_traffic[0] }}</div><div class="label">{{ total_traffic[1] }}</div></div>
     <div class="stat"><div class="value">{{ counts.incidents }}</div><div class="label">Possible incidents</div></div>
     <div class="stat"><div class="value">{{ counts.devices }}</div><div class="label">Devices</div></div>
   </div>
@@ -47,7 +47,7 @@
   <div class="card">
     <h2 style="margin-top:0">Traffic Volume</h2>
     {% if traffic.points %}
-    <div class="row-actions" style="margin-bottom:.5rem">
+    <div class="row-actions" style="margin-bottom:.5rem;align-items:center">
       <button type="button" class="btn small primary" id="traffic-mode-ie" aria-pressed="true">Ingress-Egress</button>
       <button type="button" class="btn small" id="traffic-mode-total" aria-pressed="false">Total</button>
       <label for="traffic-bin" style="margin:0">Bin size (seconds)</label>
@@ -140,16 +140,16 @@
     const INGRESS = "#f97316", EGRESS = "#2563eb", INTERNAL = "#7c3aed";
     const datasets = mode => mode === "total" ? [
       { label: "INT>INT", data: traffic.points.map(p => value(p).ii), borderColor: INTERNAL,
-        backgroundColor: INTERNAL, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+        backgroundColor: INTERNAL, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
       { label: "INT>EXT", data: traffic.points.map(p => value(p).ie), borderColor: EGRESS,
-        backgroundColor: EGRESS, fill: "-1", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+        backgroundColor: EGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
       { label: "EXT>INT", data: traffic.points.map(p => value(p).ei), borderColor: INGRESS,
-        backgroundColor: INGRESS, fill: "-1", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+        backgroundColor: INGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
     ] : [
       { label: "Ingress (EXT>INT)", data: traffic.points.map(p => value(p).ei), borderColor: INGRESS,
-        backgroundColor: INGRESS, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+        backgroundColor: INGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
       { label: "Egress (INT>EXT)", data: traffic.points.map(p => -value(p).ie), borderColor: EGRESS,
-        backgroundColor: EGRESS, fill: "origin", pointRadius: traffic.points.length < 2 ? 3 : 0 },
+        backgroundColor: EGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
     ];
 
     const chart = new Chart(canvas, {
@@ -159,7 +159,7 @@
                  interaction: { mode: "index", intersect: false },
                  plugins: { legend: { display: true },
                             tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
-                 scales: { x: { ticks: { maxRotation: 0, callback(v) {   // full date stays in the tooltip
+                 scales: { x: { ticks: { maxRotation: 0, autoSkipPadding: 24, callback(v) {   // full date stays in the tooltip
                                 const t = this.getLabelForValue(v), all = this.chart.data.labels;
                                 return all[0].slice(0, 10) === all[all.length - 1].slice(0, 10) ? t.slice(11) : t.slice(5);
                               } } },

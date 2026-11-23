@@ -9,6 +9,7 @@ import pytest
 
 from netseer.src.api.deps import COLUMN_HELP, page_qs
 from netseer.src.api.routers.alerts import top_devices
+from netseer.src.api.routers.home import format_total
 from netseer.src.config import CONFIG_DIR, setting_defaults
 from netseer.src.database import db
 from netseer.src.engine import logger
@@ -200,6 +201,24 @@ def test_home_shows_traffic_volume_not_alert_trend(analysed):
     assert "Traffic Volume" in page
     assert "Traffic Rate" not in page
     assert "Alert trend" not in page
+
+
+def test_format_total_bytes(analysed):
+    assert format_total(999, 0, "byte") == ("999 B", "Total bytes")
+    assert format_total(7773808617, 0, "byte") == ("7.77 GB", "Total bytes")
+    assert format_total(12500, 0, "byte") == ("12.5 KB", "Total bytes")
+
+
+def test_format_total_bits_and_packets():
+    assert format_total(1000, 0, "bit") == ("8.00 kb", "Total bits")
+    assert format_total(0, 12345, "packet") == ("12,345 pkt", "Total packets")
+
+
+def test_home_shows_total_traffic_not_alert_groups(analysed):
+    client, _ = analysed
+    page = client.get("/").text
+    assert "Total bytes" in page
+    assert "Alert groups" not in page
 
 
 def test_traffic_series_raised_and_needs_reanalysis(tmp_path):

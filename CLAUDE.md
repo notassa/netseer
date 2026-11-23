@@ -29,6 +29,7 @@ NetSeer is an AI-assisted alert interpretation layer for small flat networks (FY
   .venv/bin/python -m netseer.eval.browser_env --port 8765 -- ~/.local/share/netseer-playwright/venv/bin/python -I <check.py>
   ```
   The script reads `NETSEER_E2E_URL`, `NETSEER_E2E_USER` and `NETSEER_E2E_PASSWORD`. Give each parallel worker its own port. Workers run a browser check only when the brief names one; Claude does the final browser review and reads the screenshots.
+- **UI polish (`/unslop`, pinned at `620163e`):** use it for UI/UX tasks only after backend and logic changes are done and tests pass. Claude runs the audit and shows it to the owner before any edit. Polish mode only, one page or component at a time. Never change data, features, risk colors or meanings, verifier wording or "possible" language. Do not use its video or snapshot scripts. Workers load it only when a brief names the approved fixes.
 - **A brief contains:** goal; exact files to edit (and files to read); the interfaces/functions to use, with paths; constants and numbers copied from the docs (never "as in the docs"); the test to add and the command that must pass; what is out of scope.
 
 ## Token economy and loop guard

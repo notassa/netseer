@@ -19,13 +19,6 @@
       <a href="{{ href }}" class="{{ 'active' if active == key }}{{ ' later' if later }}" title="{{ label }}">{{ icon(d) }}<span class="label">{{ label }}</span></a>
       {% endfor %}
     </nav>
-    <div class="sidebar-foot">
-      <div class="label">{{ user.username }} <span class="muted">({{ user.role }})</span></div>
-      <form method="post" action="/logout">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn small logout" type="submit" title="Log out">{{ icon("M15 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3") }}<span class="label">Log out</span></button>
-      </form>
-    </div>
   </aside>
   <div class="main">
     <header class="topbar">
@@ -53,6 +46,11 @@
       <button class="btn small" type="button" id="session-extend">Extend 10 min</button>
       {% endif %}
       <span class="muted">{{ now_local }}</span>
+      <span class="muted topbar-user">{{ user.username }} ({{ user.role }})</span>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn small logout" type="submit" title="Log out">{{ icon("M15 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3") }}<span class="label">Log out</span></button>
+      </form>
     </header>
     <main class="content">
       {% for kind, msg in flashes %}<div class="flash {{ kind }}">{{ msg }}</div>{% endfor %}

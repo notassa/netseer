@@ -17,6 +17,11 @@
 <span class="band {{ (band or 'note') | lower }}">{{ band or 'not scored' }}</span>
 {%- endmacro %}
 
+{# Alert severity chip: priority 1/2/3 as high/medium/low, anything else as a note, or "unknown". #}
+{% macro severity_chip(priority) -%}
+{% if priority is none %}<span class="unknown">unknown</span>{% else %}<span class="band {{ {1: 'high', 2: 'medium', 3: 'low'}.get(priority, 'note') }}">{{ priority | severity }}</span>{% endif %}
+{%- endmacro %}
+
 {# Pager for a server-paged table (deps.paging): 20 rows per page, or "Show all" (?all=1, capped) and "Hide". #}
 {% macro pager(pg, qs, prev="Previous", next="Next", noun="rows") -%}
 {% if pg.pages > 1 or pg.show_all %}

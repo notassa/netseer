@@ -17,6 +17,20 @@ from netseer.src.engine.scorer import device_bands, network_health, risk_label
 router = APIRouter(dependencies=[Depends(require_user)])
 
 
+def format_total(nbytes: int, packets: int, unit: str) -> tuple[str, str]:
+    """Human-readable total traffic for one analysis, in the user's chosen unit."""
+    if unit == "packet":
+        return f"{packets:,} pkt", "Total packets"
+    value = nbytes * 8 if unit == "bit" else nbytes
+    units = ["b", "kb", "Mb", "Gb"] if unit == "bit" else ["B", "KB", "MB", "GB"]
+    label = "Total bits" if unit == "bit" else "Total bytes"
+    x, i = float(value), 0
+    while x >= 1000 and i < len(units) - 1:
+        x /= 1000
+        i += 1
+    digits = 0 if (i == 0 or x >= 100) else (1 if x >= 10 else 2)
+    return f"{x:.{digits}f} {units[i]}", label
+
 
 @router.get("/")
 def home(request: Request, conn: sqlite3.Connection = Depends(get_db)):
@@ -42,6 +56,9 @@ def home(request: Request, conn: sqlite3.Connection = Depends(get_db)):
                                      "ORDER BY risk DESC", (aid,))
                if device_band.get(d["ip"]) in ("Critical", "High", "Medium")]
     analysis = conn.execute("SELECT * FROM analyses WHERE id = ?", (aid,)).fetchone()
+    nbytes, packets = conn.execute(
+        "SELECT COALESCE(SUM(bytes), 0), COALESCE(SUM(packets), 0) FROM packet_stats WHERE analysis_id = ?",
+        (aid,)).fetchone()
     return render(request, "home.html", {
         **ctx,
         "net": net,
@@ -50,6 +67,7 @@ def home(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         "at_risk": at_risk,
         "traffic": traffic_series(conn, aid),
         "data_unit": get_setting(conn, "data_unit"),
+        "total_traffic": format_total(nbytes, packets, get_setting(conn, "data_unit")),
         "counts": counts,
         "bands": [(b, bands.get(b, 0)) for b in BANDS],
         "analysis": analysis,

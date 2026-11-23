@@ -75,8 +75,8 @@ code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monosp
 .nav a { display: flex; align-items: center; gap: .7rem; white-space: nowrap; }
 .icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sidebar { transition: width .2s; overflow: hidden; }
-.sidebar > .brand, .sidebar-foot { flex-shrink: 0; }
-.nav { flex: 1; min-height: 0; overflow: hidden auto; scrollbar-width: thin; }   /* only the links scroll, Log out stays */
+.sidebar > .brand { flex-shrink: 0; }
+.nav { flex: 1; min-height: 0; overflow: hidden auto; scrollbar-width: thin; }   /* only the links scroll */
 .brand-mini { display: none; }
 .logout { display: inline-flex; align-items: center; gap: .4rem; }
 .session-timer { display: inline-flex; align-items: center; gap: .3rem; font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -90,20 +90,19 @@ button.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .sidebar-collapsed .brand-mini { display: inline; }
 .sidebar-collapsed .brand-mini span { color: var(--accent); }
 .sidebar-collapsed .nav a { justify-content: center; padding: .6rem 0; }
-.sidebar-collapsed .sidebar-foot { padding: 1rem 0 0; text-align: center; }
-.sidebar-foot { margin-top: auto; padding: 1rem 1.25rem 0; font-size: 12px; }
-.sidebar-foot form { margin-top: .5rem; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar {
   display: flex; align-items: center; gap: 1rem; padding: .6rem 1.5rem;
-  background: var(--surface); border-bottom: 1px solid var(--border);
+  background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap;
 }
 .topbar .spacer { flex: 1; }
+#analysis-select-form { display: flex; align-items: center; min-width: 0; max-width: 100%; }
+#analysis-select { flex: 1; min-width: 0; max-width: 100%; }
 .content { padding: 1.5rem; width: 100%; }
 
 /* Components */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
-.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
 .muted { color: var(--muted); }
 .unknown { color: var(--muted); font-style: italic; }
 .btn {
@@ -149,6 +148,12 @@ table.data tr.clickable:hover td { background: var(--surface-2); }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 50; }
 .modal-backdrop.open { display: flex; }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: min(900px, 94vw); max-height: 88vh; overflow: auto; padding: 1.5rem; }
+#attribution-modal .modal { display: flex; flex-direction: column; overflow: hidden; }
+#attribution-modal .modal > h1, #attribution-modal .modal > p { flex-shrink: 0; }
+#attribution-modal form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#attribution-modal .table-wrap { flex: 1; min-height: 0; overflow: auto; }
+#attribution-modal thead th { position: sticky; top: 0; z-index: 1; }
+#attribution-modal form > p { flex-shrink: 0; }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 94vw); background: var(--surface); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform .2s; z-index: 40; display: flex; flex-direction: column; }
 .drawer.open { transform: none; }
 .drawer header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
@@ -165,6 +170,7 @@ table.data tr.clickable:hover td { background: var(--surface-2); }
 .tick-groups label { display: block; font-weight: normal; margin: .1rem 0; white-space: nowrap; }
 .pager { display: flex; gap: .5rem; align-items: center; margin-top: .75rem; }
 .chart-box { position: relative; height: 260px; }
+.mix-scroll { max-height: 260px; overflow-y: auto; }
 .inline-form { display: inline; }
 .row-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .progress { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin-top: .4rem; }

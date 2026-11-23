@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "macros.html" import band_chip %}
+{% from "macros.html" import band_chip, severity_chip %}
 {% block title %}Incident {{ inc.id }}{% endblock %}
 {% macro unk(v) %}{% if v is none or v == "" %}<span class="unknown">unknown</span>{% else %}{{ v }}{% endif %}{% endmacro %}
 {% macro num(v) %}{% if v is none %}<span class="unknown">left out</span>{% elif v is number and v != v | int %}{{ '%.2f' | format(v) }}{% else %}{{ v }}{% endif %}{% endmacro %}
@@ -105,7 +105,7 @@
     <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
     <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
     <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
-    <td>{{ unk(a.priority | severity) }}</td>
+    <td>{{ severity_chip(a.priority) }}</td>
     <td>{{ unk(a.direction) }}</td>
   </tr>
   {% endfor %}
