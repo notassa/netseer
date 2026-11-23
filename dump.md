@@ -9,6 +9,13 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-23] Use /unslop for UI/UX after logic → new; adopted with limits (polish only, audit first, protected risk and wording), pinned 620163e → CLAUDE.md, AGENTS.md → c6efa5d
+- [2026-11-23] Traffic Volume as lines → new; done → CONCEPTS A10 → c6efa5d
+- [2026-11-23] Sidebar bound to browser height, Log out to topbar → height already done; move done → CONCEPTS A10, brief §9 → c6efa5d
+- [2026-11-23] Device Attribution scrolls only its table → new; done → c6efa5d
+- [2026-11-23] Detected Alert Classes as scrollable bars → conflicted with pie in A5.5/brief §9; done → CONCEPTS A5.5, brief §9 → c6efa5d
+- [2026-11-23] Alert severity chips like Top Incidents → new; done, also on incident detail → CONCEPTS A10 → c6efa5d
+- [2026-11-23] Home Analysis: Alert Groups → Total bit/byte/packets → new; done, follows Data Representation → CONCEPTS A10 → c6efa5d
 - [2026-11-23] Left panel: Log out always visible → partly done before; only links scroll now → CONCEPTS A10 → a7f0e76
 - [2026-11-23] Home: Traffic Volume, amount per bin, input + wheel + Reset, swap with Top Incidents → reversed the per-second choice; owner set a 5 s minimum, new `traffic_stats` → CONCEPTS A10, brief §5/§9 → a7f0e76
 - [2026-11-23] Playwright usable by orchestrator and workers → new; done, cleaned DB copy via `netseer.eval.browser_env`, tested from a real worker → CLAUDE.md, AGENTS.md → 8547369
