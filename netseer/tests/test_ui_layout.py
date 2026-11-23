@@ -15,9 +15,9 @@ def test_logout_form_in_topbar_not_sidebar(analysed):
 def test_severity_chips_in_alert_table(analysed):
     client, _ = analysed
     page = client.get("/alerts").text
-    assert 'class="band high">[1] High' in page
-    assert 'class="band medium">[2] Medium' in page
-    assert 'class="band low">[3] Low' in page
+    assert 'class="band high">High' in page
+    assert 'class="band medium">Medium' in page
+    assert 'class="band low">Low' in page
 
 
 def test_severity_chip_macro():
@@ -25,5 +25,11 @@ def test_severity_chip_macro():
 
     chip = templates.env.get_template("macros.html").module.severity_chip
     four = str(chip(4))
-    assert 'class="band note"' in four and "[4] Info" in four
+    assert 'class="band note"' in four and ">Info<" in four
+    assert ">7<" in str(chip(7))
     assert "unknown" in str(chip(None))
+
+
+def test_static_files_are_revalidated(analysed):
+    client, _ = analysed
+    assert client.get("/static/js/app.js").headers["cache-control"] == "no-cache"

@@ -149,7 +149,7 @@
   const list = document.getElementById("mix-list");
   if (list) {
     const SEV = {1: "High", 2: "Medium", 3: "Low", 4: "Info"};
-    const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? `[${key}] ${SEV[key] || ""}`.trim() : key);
+    const label = (kind, key) => key == null ? "unknown" : (kind === "priority" ? (SEV[key] || String(key)) : key);
     const show = kind => {
       list.replaceChildren();
       for (const m of mix[kind]) {

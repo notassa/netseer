@@ -5,6 +5,7 @@ Last updated: 2026-11-23
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-23] Fix charts breaking on a stale cached app.js; show severity as High, Medium, Low, Info without [n]
 - [2026-11-23] One UI style system across all pages and both themes; approved unslop polish applied
 - [2026-11-23] Line Traffic Volume, total traffic card, Log out in topbar, attribution table scroll, alert class bars, severity chips; unslop rules added
 - [2026-11-23] Home Traffic Volume on a 5-second table (5–3600 s bins, wheel + Reset), cards swapped; Log out always visible

@@ -129,6 +129,7 @@ One row per brief §10 step or change request, with the evidence that its Check 
 | dump.md ideas (2026-11-23): Traffic Volume, 5 s table, card swap, pinned Log out | Done | ✅ `pytest netseer/tests`: 227 passed; Playwright on a cleaned DB copy: 25/25 checks, no console errors; UNSW logger 38.0 s → 39.7 s, 1,317 rows, split packets and bytes equal `packet_stats` |
 | dump.md ideas (2026-11-23): line chart, total traffic, topbar Log out, attribution scroll, class bars, severity chips, unslop rules | Done | ✅ `pytest netseer/tests`: 233 passed; Playwright on a cleaned DB copy: 18/18 checks at 390–1366 px, no console errors. `unslop` audit awaits owner approval |
 | Owner request (2026-11-23): consistent UI/UX across the system, approved unslop fixes | Done | ✅ `pytest netseer/tests`: 233 passed; Playwright on a cleaned DB copy: 9 pages × 2 themes × 2 widths (36/36), 14/14 interaction checks, no console errors |
+| dump.md ideas (2026-11-23): stale-script chart fix, severity labels without [n] | Done | ✅ static files send `Cache-Control: no-cache`; browser check on DB copy: 4 charts drawn on Home + Alerts, no page errors, no [n] labels; `pytest netseer/tests` 234 passed |
 
 ## Decisions to confirm at the demo
 Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belong in CONCEPTS.md; remove them here once confirmed.

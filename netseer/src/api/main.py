@@ -45,7 +45,9 @@ def create_app(db_path: str | Path | None = None, data_dir: str | Path | None = 
         """Redirect to /setup until an admin exists; then attach the session's user to the request."""
         path = request.url.path
         if path.startswith("/static"):
-            return await call_next(request)
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-cache"  # revalidate, so pages never run a stale app.js
+            return response
         conn = db.connect(app.state.db_path)
         try:
             if not app.state.admin_exists:

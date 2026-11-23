@@ -351,7 +351,7 @@ Updated after every change that moves a number. How each step was checked: `docs
 2. **Network:** show the analyses list. Open "big" (UNSW-NB15). Show the capture checks: the 25-minute gap where a
    file is missing. Optionally start a small upload and press **Stop** to show the clean-up.
 3. **Home:** health 41 and the incidents that cost the most points; devices at risk.
-4. **Alerts:** packets chart, alert mix ("not risk"), tick-box filters (e.g. severity [1] High + [2] Medium), one raw JSON record.
+4. **Alerts:** packets chart, alert mix ("not risk"), tick-box filters (e.g. severity High + Medium), one raw JSON record.
 5. **Incidents:** sort by band. Open a Critical one: Attack → Victim, timeline, factor table. Explain one factor
    end to end, e.g. L3 = 5 because R2 fired.
 6. **Devices:** change a device's type (e.g. Server → Guest) and show the score and health change at once.

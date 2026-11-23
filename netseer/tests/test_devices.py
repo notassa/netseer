@@ -178,7 +178,7 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
     client, _ = analysed
     page = client.get("/alerts").text
     assert "Suricata rule priority as severity" in page and 'th:not([title])' in page
-    assert "[1] High" in page
+    assert 'class="band high">High' in page
     head = page.split('id="alerts-table"', 1)[1].split("</thead>", 1)[0]
     assert re.findall(r'data-key="([^"]+)"', head) == \
         ["id", "time", "severity", "signature", "class", "direction", "src", "dest", "proto"]

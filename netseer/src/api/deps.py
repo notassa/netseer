@@ -102,7 +102,7 @@ COLUMN_HELP = {
     "Seen (UTC)": "First and last time seen, in UTC",
     "Sent": "Alerts where this device was the source",
     "Services": "Ports this device answered on (services it offers)",
-    "Severity": "Suricata rule priority as severity: [1] High, [2] Medium, [3] Low, [4] Info",
+    "Severity": "Suricata rule priority as severity: 1 High, 2 Medium, 3 Low, 4 Info",
     "Signature": "Rule message and SID (signature ID)",
     "Source": "Source address and port of the traffic",
     "Span (UTC)": "From the first to the last alert of the incident, in UTC",
@@ -124,11 +124,10 @@ templates.env.globals["column_help"] = COLUMN_HELP
 
 
 def severity_label(priority: int | None) -> str | None:
-    """Suricata rule priority as a severity label: [1] High, [2] Medium, [3] Low, [4] Info, or [n] for other ints."""
+    """Suricata rule priority as a severity label: High, Medium, Low, Info, or the number for other ints."""
     if priority is None:
         return None
-    names = {1: "High", 2: "Medium", 3: "Low", 4: "Info"}
-    return f"[{priority}] {names[priority]}" if priority in names else f"[{priority}]"
+    return {1: "High", 2: "Medium", 3: "Low", 4: "Info"}.get(priority, str(priority))
 
 
 templates.env.filters["severity"] = severity_label
