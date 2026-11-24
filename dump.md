@@ -9,6 +9,8 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-24] Test VirusTotal, ensure enrichment works → key and API work (8.8.8.8: 92 engines, 1 malicious); fixed live enrichment, 20-IP cap, rate limit; real session lookup not run → CONCEPTS A9, RAD-PLAN → 0d05065
+- [2026-11-24] Alerts table filter rework → new; done with port, UTC time, proto, IP prefix/CIDR, removable chips → CONCEPTS A10, brief §9, RAD-PLAN → 0d05065
 - [2026-11-24] Live stores eve.json + re-analyse → storing already done; Reprocess added, no new Suricata detection, device types kept → CONCEPTS A10/A13, brief §6c/§9 → 5cba687
 - [2026-11-24] Settings tick to ignore NetSeer + Tailscale → new; done, default off, live only, alerts only; session 7: 20,551 of 23,540 hidden → CONCEPTS A3/A15, brief §6c → 5cba687
 - [2026-11-24] Delete "## Archive" → done; text stays in git history → 5cba687
