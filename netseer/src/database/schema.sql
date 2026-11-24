@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS settings (
     value  TEXT NOT NULL
 );
 
--- Fernet-encrypted (abuseipdb, virustotal, cloud_llm).
+-- Fernet-encrypted (abuseipdb, virustotal, openai, claude, deepseek).
 CREATE TABLE IF NOT EXISTS api_keys (
     name        TEXT PRIMARY KEY,
     ciphertext  TEXT NOT NULL

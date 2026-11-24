@@ -9,6 +9,7 @@ import pytest
 
 from netseer.ai import llm_caller, prompt_maker
 from netseer.src import keystore
+from netseer.src.database import db
 from netseer.src.engine import ti
 from netseer.src.engine.acp import rescore, run_acp
 from netseer.src.engine.scorer import network_health
@@ -81,7 +82,7 @@ def test_virustotal_scales_by_engines_and_unknown_is_not_safe(monkeypatch, stats
 def test_keys_are_encrypted_and_write_only(scored):  # noqa: F811
     client, conn = scored
     r = client.post("/settings/ai", data={"csrf_token": csrf(client, "/settings"), "llm_backend": "cloud",
-                                          "llm_model": "llama3.2:3b", "cloud_url": "https://api.example.com/v1",
+                                          "llm_model": "llama3.2:3b", "cloud_provider": "openai",
                                           "cloud_model": "", "key_virustotal": "vt-secret"})
     assert r.status_code == 303
     row = conn.execute("SELECT ciphertext FROM api_keys WHERE name = 'virustotal'").fetchone()
@@ -95,7 +96,7 @@ def test_cloud_backend_posts_openai_style(scored, monkeypatch):  # noqa: F811
     _, conn = scored
     for key, value in (("llm_backend", "cloud"), ("cloud_model", "small-model")):
         conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
-    keystore.set_key(conn, "cloud_llm", "sk-test")
+    keystore.set_key(conn, "openai", "sk-test")
     sent = {}
 
     def post(url, json, timeout, headers):  # noqa: A002 - mirrors httpx.post
@@ -115,8 +116,101 @@ def test_settings_sections_are_tabs_and_saves_return_to_their_tab(scored):  # no
     for tab in ("theme", "accounts", "config", "ai", "kb", "oui", "detonate"):
         assert f'id="tab-{tab}"' in page and f'href="#tab-{tab}"' in page
     r = client.post("/settings/ai", data={"csrf_token": csrf(client, "/settings"), "llm_backend": "ollama",
-                                          "llm_model": "llama3.2:3b", "cloud_url": "", "cloud_model": ""})
+                                          "llm_model": "llama3.2:3b", "cloud_provider": "openai", "cloud_model": ""})
     assert r.headers["location"] == "/settings#tab-ai"
+
+
+def test_deepseek_backend_uses_json_object(scored, monkeypatch):  # noqa: F811
+    _, conn = scored
+    for key, value in (("llm_backend", "cloud"), ("cloud_provider", "deepseek"), ("cloud_model", "deepseek-flash")):
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    keystore.set_key(conn, "deepseek", "sk-test")
+    sent = {}
+
+    def post(url, json, timeout, headers):  # noqa: A002 - mirrors httpx.post
+        sent.update(url=url, body=json, headers=headers)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]}, request=httpx.Request("POST", url))
+    monkeypatch.setattr(llm_caller.httpx, "post", post)
+    backend = llm_caller.backend_for(conn)
+    assert backend.chat("s", "u", {"type": "object"}) == "{}"
+    assert sent["url"] == "https://api.deepseek.com/chat/completions"
+    assert sent["body"]["response_format"] == {"type": "json_object"}
+    assert "JSON schema of the reply" in sent["body"]["messages"][0]["content"]
+    assert "temperature" in sent["body"]
+
+
+def test_claude_backend_uses_strict_json_schema_and_no_temperature(scored, monkeypatch):  # noqa: F811
+    _, conn = scored
+    for key, value in (("llm_backend", "cloud"), ("cloud_provider", "claude"), ("cloud_model", "claude-haiku-5-5")):
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    keystore.set_key(conn, "claude", "sk-test")
+    sent = {}
+
+    def post(url, json, timeout, headers):  # noqa: A002 - mirrors httpx.post
+        sent.update(url=url, body=json, headers=headers)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]}, request=httpx.Request("POST", url))
+    monkeypatch.setattr(llm_caller.httpx, "post", post)
+    backend = llm_caller.backend_for(conn)
+    assert backend.chat("s", "u", {"type": "object"}) == "{}"
+    assert sent["url"] == "https://api.anthropic.com/v1/chat/completions"
+    assert sent["body"]["response_format"]["type"] == "json_schema"
+    assert sent["body"]["response_format"]["json_schema"]["strict"] is True
+    assert "temperature" not in sent["body"]
+
+
+def test_cloud_http_error_redacts_the_key(scored, monkeypatch):  # noqa: F811
+    _, conn = scored
+    for key, value in (("llm_backend", "cloud"), ("cloud_model", "small-model")):
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    keystore.set_key(conn, "openai", "sk-secret-xyz")
+
+    def post(url, json, timeout, headers):  # noqa: A002 - mirrors httpx.post
+        return httpx.Response(400, text="bad request: sk-secret-xyz leaked", request=httpx.Request("POST", url))
+    monkeypatch.setattr(llm_caller.httpx, "post", post)
+    backend = llm_caller.backend_for(conn)
+    with pytest.raises(llm_caller.LLMError) as exc:
+        backend.chat("s", "u", {"type": "object"})
+    assert "HTTP 400" in str(exc.value) and "sk-secret-xyz" not in str(exc.value)
+
+
+def test_keys_per_provider_are_encrypted_and_never_leaked(scored, monkeypatch):  # noqa: F811
+    client, conn = scored
+    r = client.post("/settings/ai", data={"csrf_token": csrf(client, "/settings"), "llm_backend": "cloud",
+                                          "llm_model": "llama3.2:3b", "cloud_provider": "deepseek",
+                                          "cloud_model": "deepseek-flash", "key_deepseek": "sk-secret-xyz"})
+    assert r.status_code == 303
+    row = conn.execute("SELECT ciphertext FROM api_keys WHERE name = 'deepseek'").fetchone()
+    assert row and "sk-secret-xyz" not in row[0] and keystore.get_key(conn, "deepseek") == "sk-secret-xyz"
+    assert "sk-secret-xyz" not in client.get("/settings").text
+    monkeypatch.setattr(llm_caller.httpx, "get", lambda *a, **k: (_ for _ in ()).throw(httpx.HTTPError("x")))
+    r = client.get("/settings/ai/models", params={"provider": "deepseek"})
+    assert r.status_code == 200
+    assert r.json() == {"models": ["deepseek-flash", "deepseek-v4-pro"], "source": "built-in"}
+    for detail in (row[0] for row in conn.execute("SELECT detail FROM audit_log")):
+        assert "sk-secret-xyz" not in detail
+
+
+def test_cloud_keys_are_not_shared_across_providers(scored):  # noqa: F811
+    _, conn = scored
+    for key, value in (("llm_backend", "cloud"), ("cloud_provider", "deepseek"), ("cloud_model", "deepseek-flash")):
+        conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    keystore.set_key(conn, "openai", "sk-openai")
+    with pytest.raises(llm_caller.LLMError):
+        llm_caller.backend_for(conn)
+
+
+def test_migrate_drops_legacy_cloud_key_and_url(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    db.init_db(db_path)
+    conn = db.connect(db_path)
+    conn.execute("INSERT INTO api_keys(name, ciphertext) VALUES ('cloud_llm', 'x')")
+    conn.execute("INSERT INTO settings(key, value) VALUES ('cloud_url', ?)", (json.dumps("https://x"),))
+    conn.close()
+    db.init_db(db_path)
+    conn = db.connect(db_path)
+    assert conn.execute("SELECT 1 FROM api_keys WHERE name = 'cloud_llm'").fetchone() is None
+    assert conn.execute("SELECT 1 FROM settings WHERE key = 'cloud_url'").fetchone() is None
+    conn.close()
 
 
 def test_ti_results_are_kept_until_detonate(scored, monkeypatch):  # noqa: F811

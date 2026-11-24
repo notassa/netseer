@@ -20,12 +20,9 @@
   <div class="row-actions" style="margin-bottom:.5rem;align-items:center">
     <button type="button" class="btn small primary" id="traffic-mode-total" aria-pressed="true">Total</button>
     <button type="button" class="btn small" id="traffic-mode-ie" aria-pressed="false">Ingress-Egress</button>
-    <label for="traffic-bin" style="margin:0">Bin size (seconds)</label>
-    <input id="traffic-bin" type="number" min="5" max="3600" step="5" value="{{ traffic.seconds }}" style="width:7rem">
-    <button type="button" class="btn small" id="traffic-bin-reset">Reset</button>
-    <span class="muted" id="traffic-bin-note" role="status"></span>
   </div>
-    <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
+  <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
+  <span class="muted" id="traffic-bin-note" role="status"></span>
   {% elif traffic.needs_reanalysis %}
     <p class="muted">Re-analyse this analysis to see traffic volume.</p>
   {% else %}

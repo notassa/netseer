@@ -176,6 +176,7 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         (selected["id"], *args, pg["limit"], pg["offset"]),
     ).fetchall()
     minutes = default_bin_minutes(conn, selected["id"])
+    bin_label = f"{minutes // 60} h" if minutes % 60 == 0 else f"{minutes} min"
     return render(request, "alerts.html", {
         **ctx,
         "rows": rows,
@@ -192,6 +193,7 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
                                            (selected["id"],))},
         "n_filters": sum(k in params for k in FILTER_KEYS),
         "bin_minutes": minutes,
+        "bin_label": bin_label,
         "packets": packet_series(conn, selected["id"], minutes),
         "alert_counts": alert_series(conn, selected["id"], minutes),
         "top_devices": top_devices(conn, selected["id"]),
@@ -230,7 +232,7 @@ def packet_series(conn: sqlite3.Connection, analysis_id: int, minutes: int) -> l
 
 
 TRAFFIC_MIN_S = 5
-TRAFFIC_MAX_S = 3600
+TRAFFIC_MAX_S = 3_600_000
 TRAFFIC_DEFAULT_POINTS = 200
 TRAFFIC_MAX_POINTS = 2500
 TRAFFIC_DEFAULT_BINS = (5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600)
@@ -245,12 +247,12 @@ def traffic_series(conn: sqlite3.Connection, analysis_id: int, seconds: int | No
                              (analysis_id,)).fetchone() is not None
         return {"seconds": 60, "default_seconds": 60, "raised": False, "points": [], "needs_reanalysis": needs}
     span = hi - lo + TRAFFIC_MIN_S
-    default = next((b for b in TRAFFIC_DEFAULT_BINS if span / b <= TRAFFIC_DEFAULT_POINTS), TRAFFIC_MAX_S)
+    default = next((b for b in TRAFFIC_DEFAULT_BINS if span / b <= TRAFFIC_DEFAULT_POINTS), 3600)
     requested = seconds or default
     floor = TRAFFIC_MIN_S
     while span / floor > TRAFFIC_MAX_POINTS:
         floor += TRAFFIC_MIN_S
-    used = max(requested, floor)
+    used = max(-(-requested // TRAFFIC_MIN_S) * TRAFFIC_MIN_S, floor)  # round up to a 5 s bucket
     raised = used != requested
     rows = conn.execute(
         "SELECT second / ? * ? AS t, SUM(ii_packets) AS ii_packets, SUM(ii_bytes) AS ii_bytes, "
@@ -298,22 +300,20 @@ def default_bin_minutes(conn: sqlite3.Connection, analysis_id: int) -> int:
 
 
 @router.get("/api/analyses/{analysis_id}/packets")
-def packets_api(analysis_id: int, minutes: int = Query(60, ge=1, le=1440), conn: sqlite3.Connection = Depends(get_db)):
+def packets_api(analysis_id: int, minutes: int = Query(60, ge=1, le=60000), conn: sqlite3.Connection = Depends(get_db)):
     """Packets per x minutes for the Alerts chart's Update button."""
     return packet_series(conn, analysis_id, minutes)
 
 
 @router.get("/api/analyses/{analysis_id}/traffic")
-def traffic_api(analysis_id: int, seconds: int | None = Query(None, ge=TRAFFIC_MIN_S, le=TRAFFIC_MAX_S),
+def traffic_api(analysis_id: int, seconds: int | None = Query(None, ge=1, le=TRAFFIC_MAX_S),
                 conn: sqlite3.Connection = Depends(get_db)):
     """Traffic volume per x seconds split by direction for the Home Traffic Volume chart."""
-    if seconds is not None and seconds % TRAFFIC_MIN_S:
-        raise HTTPException(status_code=400, detail="seconds must be a multiple of 5.")
     return traffic_series(conn, analysis_id, seconds)
 
 
 @router.get("/api/analyses/{analysis_id}/alert-series")
-def alert_series_api(analysis_id: int, minutes: int = Query(60, ge=1, le=1440),
+def alert_series_api(analysis_id: int, minutes: int = Query(60, ge=1, le=60000),
                      conn: sqlite3.Connection = Depends(get_db)):
     """Alerts per x minutes for the Alerts chart's Update button."""
     return alert_series(conn, analysis_id, minutes)

@@ -52,6 +52,17 @@ def test_modal_lists_internal_hosts_after_upload(analysed):
     assert "alice-laptop" in modal and "Apple, Inc." in modal
 
 
+def test_device_row_opens_popup_data(analysed):
+    client, conn = analysed
+    page = client.get("/devices").text
+    assert 'id="device-modal"' in page
+    assert 'data-device="' in page and 'aria-haspopup="dialog"' in page
+    device_id = _device_ids(conn)["192.168.100.24"]
+    assert f'data-device="{device_id}"' in page
+    assert '/alerts?src_ip=' in page
+    assert '<select name="type"' in page
+
+
 def test_saved_types_persist_and_finish_the_analysis(analysed):
     client, conn = analysed
     ids = _device_ids(conn)
@@ -264,11 +275,29 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
 
 def test_traffic_api_bin_validation(analysed):
     client, _ = analysed
-    assert client.get("/api/analyses/1/traffic?seconds=7").status_code == 400
-    assert client.get("/api/analyses/1/traffic?seconds=4").status_code == 422
+    data = client.get("/api/analyses/1/traffic?seconds=7").json()
+    assert data["seconds"] == 10 and data["raised"] is True
+    data = client.get("/api/analyses/1/traffic?seconds=4").json()
+    assert data["seconds"] == 5 and data["raised"] is True
+    assert client.get("/api/analyses/1/traffic?seconds=0").status_code == 422
+    assert client.get("/api/analyses/1/traffic?seconds=3600001").status_code == 422
     data = client.get("/api/analyses/1/traffic?seconds=5").json()
     assert data["points"]
     assert "default_seconds" in client.get("/api/analyses/1/traffic").json()
+
+
+def test_alert_series_minutes_limits(analysed):
+    client, _ = analysed
+    assert client.get("/api/analyses/1/alert-series?minutes=60000").status_code == 200
+    assert client.get("/api/analyses/1/alert-series?minutes=60001").status_code == 422
+
+
+def test_bin_settings_replace_inline_controls(analysed):
+    client, _ = analysed
+    home = client.get("/").text
+    assert "/static/js/binsettings.js" in home
+    assert 'id="traffic-bin"' not in home
+    assert "js-bin-form" not in client.get("/alerts").text
 
 
 def test_home_shows_traffic_volume_not_alert_trend(analysed):

@@ -237,7 +237,7 @@ deterministic.
 
 ### 5.3 Model and checks
 - `llama3.2:3b` on Ollama, CPU only, with a JSON schema that forces 1–4 citations per claim and action. An optional
-  cloud model can be used with the owner's own key.
+  cloud model (OpenAI, Claude or DeepSeek) can be used with the owner's own key for that provider.
 - **Prompt Maker** buttons change only the instruction: Explain simply · What should I do now? · Is this serious? ·
   Explain technically · Summarise this analysis.
 - **Verifier** before display: (1) schema, retried once; (2) every claim cites an existing E#/K#; (3) every IP, port,

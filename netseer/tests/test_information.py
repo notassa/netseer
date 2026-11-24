@@ -31,8 +31,17 @@ def test_login_and_logout_record_ip_and_unknown_mac(client):
         (row,) = rows(client, action)
         assert row["ip"] == "testclient" and row["mac"] is None
     login(client)
-    page = client.get("/information").text
+    page = client.get("/information?tab=account").text
     assert "Signed in" in page and "Failed sign-in" in page and "Signed out" in page and "testclient" in page
+
+
+def test_information_defaults_to_details(client):
+    do_setup(client)
+    login(client)
+    page = client.get("/information").text
+    assert "Up since" in page
+    assert page.index("NetSeer details") < page.index("Account activity")
+    assert re.search(r'id="u-mem">[^<]*\(\d+%\)', page)
 
 
 def test_session_expiry_is_logged(client):

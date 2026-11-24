@@ -5,12 +5,13 @@
 {% block content %}
 <h1>Information</h1>
 <div class="row-actions" style="margin-bottom:1rem">
+  <a class="btn {{ 'primary' if tab == 'details' }}" href="/information?tab=details">NetSeer details</a>
   <a class="btn {{ 'primary' if tab == 'account' }}" href="/information?tab=account">Account activity</a>
   <a class="btn {{ 'primary' if tab == 'process' }}" href="/information?tab=process">Process log</a>
-  <a class="btn {{ 'primary' if tab == 'details' }}" href="/information?tab=details">NetSeer details</a>
 </div>
 {% if tab == "details" %}
 {% macro gb(n) %}{{ '%.1f' | format(n / 1073741824) }} GB{% endmacro %}
+{% macro usage(used, total) %}{{ gb(used) }} of {{ gb(total) }}{% if total %} ({{ (100 * used / total) | round | int }}%){% endif %}{% endmacro %}
 <p class="muted">The machine NetSeer runs on. Usage and temperatures refresh every 5 seconds.</p>
 <div class="grid">
   <div class="card">
@@ -31,8 +32,8 @@
     <table class="kv" id="sys-usage">
       <tr><th>CPU</th><td id="u-cpu">{{ sys.usage.cpu_percent }}%</td></tr>
       <tr><th>Load (1/5/15 min)</th><td id="u-load">{{ sys.usage.load | join(' / ') }}</td></tr>
-      <tr><th>Memory</th><td id="u-mem">{{ gb(sys.usage.memory.used) }} of {{ gb(sys.usage.memory.total) }}</td></tr>
-      <tr><th>Disk (data)</th><td id="u-disk">{{ gb(sys.usage.disk.used) }} of {{ gb(sys.usage.disk.total) }}</td></tr>
+      <tr><th>Memory</th><td id="u-mem">{{ usage(sys.usage.memory.used, sys.usage.memory.total) }}</td></tr>
+      <tr><th>Disk (data)</th><td id="u-disk">{{ usage(sys.usage.disk.used, sys.usage.disk.total) }}</td></tr>
       <tr><th>Temperatures</th><td id="u-temp">{% for t in sys.usage.temperatures %}{{ t.sensor }} {{ t.label }}: {{ '%.0f' | format(t.celsius) }} °C{{ '<br>' | safe if not loop.last }}{% else %}<span class="unknown">no sensors</span>{% endfor %}</td></tr>
     </table>
   </div>
@@ -112,13 +113,14 @@
 // Refresh usage and temperatures every 5 s.
 (function () {
   const gb = n => `${(n / 1073741824).toFixed(1)} GB`;
+  const usage = (used, total) => `${gb(used)} of ${gb(total)}${total ? ` (${Math.round(100 * used / total)}%)` : ""}`;
   setInterval(async () => {
     try {
       const u = await getJSON("/api/system");
       document.getElementById("u-cpu").textContent = `${u.cpu_percent}%`;
       document.getElementById("u-load").textContent = u.load.join(" / ");
-      document.getElementById("u-mem").textContent = `${gb(u.memory.used)} of ${gb(u.memory.total)}`;
-      document.getElementById("u-disk").textContent = `${gb(u.disk.used)} of ${gb(u.disk.total)}`;
+      document.getElementById("u-mem").textContent = usage(u.memory.used, u.memory.total);
+      document.getElementById("u-disk").textContent = usage(u.disk.used, u.disk.total);
       document.getElementById("u-temp").innerHTML = u.temperatures.map(t =>
         `${esc(t.sensor)} ${esc(t.label)}: ${t.celsius.toFixed(0)} °C`).join("<br>") || "no sensors";
     } catch (e) { /* try again next time */ }

@@ -49,6 +49,7 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
     type: "line",
     data: { labels: traffic.points.map(p => p.t), datasets: datasets("total") },
     options: { maintainAspectRatio: false,
+               layout: { padding: { bottom: 20 } },
                interaction: { mode: "index", intersect: false },
                plugins: { legend: { display: true },
                           tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}` } } },
@@ -79,16 +80,13 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
   buttons.ie.addEventListener("click", () => setMode("ie"));
   buttons.total.addEventListener("click", () => setMode("total"));
 
-  const binInput = document.getElementById("traffic-bin");
   const binNote = document.getElementById("traffic-bin-note");
-  const clamped = s => Math.min(3600, Math.max(5, s));
   let requestId = 0;
-  let debounce = null;
+  let settings;
 
   const applyFresh = fresh => {
     seconds = fresh.seconds;
     traffic.points = fresh.points;
-    binInput.value = fresh.seconds;
     chart.data.labels = fresh.points.map(p => p.t);
     chart.data.datasets = datasets(mode);
     chart.options.scales.x.title.text = `Time (UTC), ${binLabel(seconds)} bins`;
@@ -98,29 +96,17 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
   };
 
   const fetchTraffic = url => {
-    clearTimeout(debounce);
     const id = ++requestId;
-    getJSON(url).then(fresh => { if (id === requestId) applyFresh(fresh); })
-                .catch(() => { /* leave the chart unchanged on error */ });
+    getJSON(url).then(fresh => {
+      if (id === requestId) { applyFresh(fresh); settings.setCurrent(fresh.seconds); }
+    }).catch(() => { /* leave the chart unchanged on error */ });
   };
 
-  binInput.addEventListener("change", () => {
-    const raw = parseInt(binInput.value, 10);
-    const s = clamped(Number.isNaN(raw) ? seconds : Math.round(raw / 5) * 5);
-    binInput.value = s;
-    fetchTraffic(`/api/analyses/${analysisId}/traffic?seconds=${s}`);
-  });
-
-  binInput.addEventListener("wheel", e => {
-    if (document.activeElement !== binInput) return;
-    e.preventDefault();
-    const s = clamped((Number(binInput.value) || seconds) + (e.deltaY < 0 ? 5 : -5));
-    binInput.value = s;
-    clearTimeout(debounce);
-    debounce = setTimeout(() => fetchTraffic(`/api/analyses/${analysisId}/traffic?seconds=${s}`), 250);
-  }, { passive: false });
-
-  document.getElementById("traffic-bin-reset").addEventListener("click", () => {
-    fetchTraffic(`/api/analyses/${analysisId}/traffic`);
+  settings = binSettings(canvas.closest(".chart-box"), {
+    current: traffic.seconds,
+    unit: "s",
+    unitMin: 5,
+    onApply: s => fetchTraffic(`/api/analyses/${analysisId}/traffic?seconds=${s}`),
+    onReset: () => fetchTraffic(`/api/analyses/${analysisId}/traffic`),
   });
 };

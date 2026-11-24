@@ -7,17 +7,11 @@
 {% if not selected %}
 <div class="card">Choose an analysis in the header, or upload a capture on the <a href="/network">Network</a> page.</div>
 {% else %}
-<datalist id="bin-choices">{% for m in [1, 5, 10, 15, 30, 60, 120, 360, 720, 1440] %}<option value="{{ m }}">{% endfor %}</datalist>
 {% macro series_card(key, title, rows, empty) %}
   <div class="card">
-    <h2 style="margin-top:0">{{ title }} per <span class="js-bin-label">{{ bin_minutes }}</span> minutes</h2>
+    <h2 style="margin-top:0">{{ title }} per <span class="js-bin-label">{{ bin_label }}</span></h2>
     {% if rows %}
-    <form class="row-actions js-bin-form" data-series="{{ key }}" style="margin-bottom:.5rem">
-      <label for="bin-{{ key }}" style="margin:0">Bin size (minutes)</label>
-      <input id="bin-{{ key }}" type="number" min="1" max="1440" value="{{ bin_minutes }}" list="bin-choices" style="width:6rem">
-      <button class="btn small primary" type="submit">Update</button>
-    </form>
-    <div class="chart-box"><canvas id="{{ key }}-chart"></canvas></div>
+    <div class="chart-box" data-series="{{ key }}"><canvas id="{{ key }}-chart"></canvas></div>
     {% else %}<p class="muted">{{ empty }}</p>{% endif %}
   </div>
 {% endmacro %}
@@ -125,6 +119,7 @@
 {% block scripts %}
 {% if selected %}
 <script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/js/binsettings.js"></script>
 <script>
 (function () {
   const css = getComputedStyle(document.documentElement);
@@ -132,28 +127,33 @@
   const accent = css.getPropertyValue("--accent").trim();
   Chart.defaults.color = text; Chart.defaults.borderColor = grid;
 
-  // Packets and alerts per x minutes: each chart has its own bin size and Update button.
+  // Packets and alerts per x minutes: each chart's gear button sets its own bin size.
   const series = { packets: [{{ packets | tojson }}, "packets", accent],
                    alerts: [{{ alert_counts | tojson }}, "alert-series", css.getPropertyValue("--danger").trim()] };
-  document.querySelectorAll(".js-bin-form").forEach(form => {
-    const key = form.dataset.series, [rows, api, color] = series[key];
+  const binMinutes = {{ bin_minutes }};
+  const binLabel = m => (m % 60 === 0 ? `${m / 60} h` : `${m} min`);
+  document.querySelectorAll(".chart-box[data-series]").forEach(box => {
+    const key = box.dataset.series, [rows, api, color] = series[key];
+    const card = box.closest(".card");
     const chart = new Chart(document.getElementById(`${key}-chart`), {
       type: "line",
       data: { labels: rows.map(p => p.t),
               datasets: [{ label: key, data: rows.map(p => p[key]), borderColor: color,
                            backgroundColor: color, tension: 0.2, pointRadius: 3 }] },
-      options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+      options: { maintainAspectRatio: false, layout: { padding: { bottom: 20 } },
+                 plugins: { legend: { display: false } },
                  scales: { y: { beginAtZero: true, title: { display: true, text: key } } } }
     });
-    form.addEventListener("submit", async e => {
-      e.preventDefault();
-      const m = Math.min(1440, Math.max(1, parseInt(form.querySelector("input").value, 10) || 60));
+    let handle;
+    const apply = async m => {
+      handle.setCurrent(m);
       const fresh = await getJSON(`/api/analyses/{{ selected.id }}/${api}?minutes=${m}`);
       chart.data.labels = fresh.map(p => p.t);
       chart.data.datasets[0].data = fresh.map(p => p[key]);
       chart.update();
-      form.closest(".card").querySelector(".js-bin-label").textContent = m;
-    });
+      card.querySelector(".js-bin-label").textContent = binLabel(m);
+    };
+    handle = binSettings(box, { current: binMinutes, unit: "min", unitMin: 1, onApply: apply, onReset: () => apply(binMinutes) });
   });
 
   const mix = {{ mix | tojson }};

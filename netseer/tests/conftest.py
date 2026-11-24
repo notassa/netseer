@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+
 import pytest
 from fastapi.testclient import TestClient
 
-from netseer.src.api.main import create_app
+# main.py builds a module-level `app` on import; point it at a throwaway database so tests never run
+# migrations or mark_interrupted() on the real src/database/netseer.db.
+_IMPORT_DIR = tempfile.mkdtemp(prefix="netseer-test-")
+os.environ["NETSEER_DB"] = os.path.join(_IMPORT_DIR, "import.db")
+os.environ["NETSEER_DATA"] = os.path.join(_IMPORT_DIR, "data")
+
+from netseer.src.api.main import create_app  # noqa: E402
 
 
 @pytest.fixture()

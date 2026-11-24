@@ -9,8 +9,9 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
+from netseer.ai import llm_caller
 from netseer.ai.kb import build_kb
 from netseer.src import keystore
 from netseer.src.api import auth
@@ -36,7 +37,7 @@ CONFIG_FIELDS = {
     "live_interval_s": ("Live processing interval", int, 5, 3600, "seconds"),
 }
 WINDOW_KEYS = ("aggregation_gap_s", "correlation_window_min")
-AI_FIELDS = ("llm_backend", "llm_model", "cloud_url", "cloud_model")
+AI_FIELDS = ("llm_backend", "llm_model", "cloud_provider", "cloud_model")
 DATA_UNITS = {"bit": "bit (b, kb, Mb, Gb)", "byte": "byte (B, KB, MB, GB)", "packet": "packet (pkt)"}
 _kb_lock = threading.Lock()      # one knowledge-base rebuild at a time
 _oui_lock = threading.Lock()
@@ -64,6 +65,7 @@ def settings_page(request: Request, user=Depends(require_user), conn: sqlite3.Co
         "kb": _kb_status(),
         "oui": oui.manuf_info() | {"updating": _oui_lock.locked()},
         "ai": {key: get_setting(conn, key) for key in AI_FIELDS},
+        "providers": llm_caller.PROVIDERS,
         "key_names": keystore.KEY_NAMES,
         "keys_set": keystore.key_names(conn),
         "auto_logout": get_setting(conn, "auto_logout"),
@@ -126,15 +128,15 @@ async def save_config(request: Request, admin=Depends(require_admin), conn: sqli
 
 @router.post("/ai", dependencies=[Depends(verify_csrf)])
 async def save_ai(request: Request, admin=Depends(require_admin), conn: sqlite3.Connection = Depends(get_db)):
-    """LLM backend and model, cloud API settings and API keys (A15). Keys are write-only: blank keeps, Remove clears."""
+    """LLM backend and model, cloud provider and API keys (A15). Keys are write-only: blank keeps, Remove clears."""
     form = await request.form()
     values = {key: str(form.get(key, "")).strip() for key in AI_FIELDS}
     if values["llm_backend"] not in ("ollama", "cloud"):
         return redirect("/settings#tab-ai", "error", "Pick the local or the cloud LLM.")
     if not values["llm_model"]:
         return redirect("/settings#tab-ai", "error", "Give the local model name.")
-    if values["cloud_url"] and not values["cloud_url"].startswith("https://"):
-        return redirect("/settings#tab-ai", "error", "The cloud API URL must start with https://.")
+    if values["cloud_provider"] not in llm_caller.PROVIDERS:
+        return redirect("/settings#tab-ai", "error", "Pick an LLM provider.")
     changed = [k for k, v in values.items() if v != get_setting(conn, k)]
     for key in changed:
         set_setting(conn, key, values[key])
@@ -145,14 +147,24 @@ async def save_ai(request: Request, admin=Depends(require_admin), conn: sqlite3.
         elif value := str(form.get(f"key_{name}", "")).strip():
             keystore.set_key(conn, name, value)
             changed.append(f"{name} key set")
-    if values["llm_backend"] == "cloud" and not (values["cloud_model"] and "cloud_llm" in keystore.key_names(conn)):
+    if values["llm_backend"] == "cloud" and not (values["cloud_model"] and
+                                                  values["cloud_provider"] in keystore.key_names(conn)):
         set_setting(conn, "llm_backend", "ollama")
-        changed.append("llm_backend = ollama (cloud needs a model and a key)")
+        changed.append("llm_backend = ollama (cloud needs a model and that provider's key)")
     if not changed:
         return redirect("/settings#tab-ai", "info", "Nothing changed.")
     audit(conn, admin["id"], "config_changed",
           "; ".join(c if " " in c else f"{c} = {values[c]}" for c in changed), *who(request))
     return redirect("/settings#tab-ai", "ok", "AI settings saved.")
+
+
+@router.get("/ai/models")
+def ai_models(provider: str, admin=Depends(require_admin), conn: sqlite3.Connection = Depends(get_db)):
+    """The selected cloud provider's model list: live from /models when its key is set, else the built-in list."""
+    if provider not in llm_caller.PROVIDERS:
+        return JSONResponse({"error": "unknown provider"}, status_code=400)
+    models, source = llm_caller.list_models(provider, keystore.get_key(conn, provider))
+    return JSONResponse({"models": models, "source": source})
 
 
 @router.post("/kb-rebuild", dependencies=[Depends(verify_csrf)])

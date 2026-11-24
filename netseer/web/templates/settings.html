@@ -124,14 +124,21 @@
     <fieldset style="border:0;padding:0;margin:0">
       <legend>LLM backend</legend>
       <label><input type="radio" name="llm_backend" value="ollama" {{ 'checked' if ai.llm_backend != 'cloud' }}> Local (Ollama)</label>
-      <label><input type="radio" name="llm_backend" value="cloud" {{ 'checked' if ai.llm_backend == 'cloud' }}> Cloud (OpenAI-compatible API)</label>
+      <label><input type="radio" name="llm_backend" value="cloud" {{ 'checked' if ai.llm_backend == 'cloud' }}> Cloud (OpenAI-compatible API: OpenAI, Claude or DeepSeek)</label>
     </fieldset>
     <label for="ai-model">Local model</label>
     <input id="ai-model" name="llm_model" value="{{ ai.llm_model }}" required style="width:100%">
-    <label for="ai-cloud-url">Cloud API URL</label>
-    <input id="ai-cloud-url" name="cloud_url" value="{{ ai.cloud_url }}" placeholder="https://api.openai.com/v1" style="width:100%">
+    <label for="ai-cloud-provider">LLM provider</label>
+    <select id="ai-cloud-provider" name="cloud_provider" style="width:100%">
+      {% for key, p in providers.items() %}<option value="{{ key }}" {{ 'selected' if ai.cloud_provider == key }}>{{ p.label }}</option>{% endfor %}
+    </select>
     <label for="ai-cloud-model">Cloud model</label>
-    <input id="ai-cloud-model" name="cloud_model" value="{{ ai.cloud_model }}" style="width:100%">
+    <select id="ai-cloud-model" name="cloud_model" style="width:100%">
+      {% set builtin = providers[ai.cloud_provider].models if ai.cloud_provider in providers else [] %}
+      {% for m in builtin %}<option value="{{ m }}" {{ 'selected' if ai.cloud_model == m }}>{{ m }}</option>{% endfor %}
+      {% if ai.cloud_model and ai.cloud_model not in builtin %}<option value="{{ ai.cloud_model }}" selected>{{ ai.cloud_model }}</option>{% endif %}
+    </select>
+    <p class="muted" id="ai-cloud-models-note">Models: built-in list (save the provider's key for the live list)</p>
     {% for name, label in key_names.items() %}
     <label for="key-{{ name }}">{{ label }} key {% if name in keys_set %}<span class="badge ok">set</span>{% else %}<span class="badge">not set</span>{% endif %}</label>
     <input id="key-{{ name }}" name="key_{{ name }}" type="password" autocomplete="off" placeholder="{{ 'leave blank to keep' if name in keys_set else 'paste a key to enable' }}" style="width:100%">
@@ -139,6 +146,52 @@
     {% endfor %}
     <p><button class="btn primary" type="submit">Save AI settings</button></p>
   </form>
+  <script>
+  // Rebuild the cloud model list for the chosen provider; the live list needs the provider's key.
+  (function () {
+    const providerSel = document.getElementById("ai-cloud-provider");
+    const modelSel = document.getElementById("ai-cloud-model");
+    const note = document.getElementById("ai-cloud-models-note");
+    if (!providerSel || !modelSel || !note) return;
+    const saved = { provider: providerSel.value, model: modelSel.value };
+    function render(models, source) {
+      const current = providerSel.value === saved.provider ? saved.model : "";
+      modelSel.textContent = "";
+      if (!models.length) {
+        const opt = document.createElement("option");
+        opt.disabled = true;
+        opt.textContent = "Save the API key to load models";
+        modelSel.appendChild(opt);
+      } else {
+        for (const m of models) {
+          const opt = document.createElement("option");
+          opt.value = m;
+          opt.textContent = m;
+          if (m === current) opt.selected = true;
+          modelSel.appendChild(opt);
+        }
+        if (current && !models.includes(current)) {   // a saved model that this list does not offer
+          const opt = document.createElement("option");
+          opt.value = current;
+          opt.textContent = current;
+          opt.selected = true;
+          modelSel.appendChild(opt);
+        }
+      }
+      note.textContent = source === "live" ? "Models: live list"
+        : "Models: built-in list (save the provider's key for the live list)";
+    }
+    async function load() {
+      try {
+        const r = await fetch("/settings/ai/models?provider=" + encodeURIComponent(providerSel.value));
+        const data = await r.json();
+        render(data.models, data.source);
+      } catch (e) { /* keep the server-rendered options */ }
+    }
+    providerSel.addEventListener("change", load);
+    load();
+  })();
+  </script>
 </div>
 
 <div class="card" id="tab-kb" data-tab>

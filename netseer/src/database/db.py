@@ -46,6 +46,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
     if "hour" in {r[1] for r in conn.execute("PRAGMA table_info(packet_stats)")}:
         conn.execute("ALTER TABLE packet_stats RENAME COLUMN hour TO minute")   # 'HH:00' values stay valid
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "api_keys" in tables:
+        conn.execute("DELETE FROM api_keys WHERE name = 'cloud_llm'")           # per-provider keys replace the shared one
+    if "settings" in tables:
+        conn.execute("DELETE FROM settings WHERE key = 'cloud_url'")
 
 
 def audit(conn: sqlite3.Connection, user_id: int | None, action: str, detail: str = "",

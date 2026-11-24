@@ -27,7 +27,7 @@ LOG_SORT = {"time": "l.id", "event": "l.action", "user": "u.username", "ip": "l.
 def information_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
     """Paged, filterable audit log for one tab, or the NetSeer Details tab."""
     params = {k: v for k, v in request.query_params.items() if v}
-    if params.get("tab") == "details":
+    if params.get("tab") in (None, "details"):
         return render(request, "information.html", {
             **layout_context(request, conn, "information"), "tab": "details",
             "sys": sysinfo.snapshot(conn, request.app.state.data_dir, request.app.state.db_path)})

@@ -1,4 +1,4 @@
-"""API keys (AbuseIPDB, VirusTotal, cloud LLM), Fernet-encrypted in `api_keys` (CONCEPTS A9).
+"""API keys (AbuseIPDB, VirusTotal, per-provider cloud LLM), Fernet-encrypted in `api_keys` (CONCEPTS A9).
 
 The Fernet key lives in src/database/netseer.key (mode 600, never committed); the database alone does not reveal keys.
 """
@@ -12,7 +12,8 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from netseer.src.config import DATABASE_DIR
 
-KEY_NAMES = {"abuseipdb": "AbuseIPDB", "virustotal": "VirusTotal", "cloud_llm": "Cloud LLM"}
+KEY_NAMES = {"abuseipdb": "AbuseIPDB", "virustotal": "VirusTotal", "openai": "OpenAI", "claude": "Claude",
+             "deepseek": "DeepSeek"}
 KEY_FILE = DATABASE_DIR / "netseer.key"
 
 

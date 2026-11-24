@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from netseer.src.api.deps import (distinct_values, get_db, layout_context, order_by, page_qs, paging, redirect, render,
                                   require_admin, require_user, verify_csrf)
+from netseer.src.api.routers.incidents import incident_rows
 from netseer.src.database.db import audit
 from netseer.src.engine.acp import ensure_acp, rescore
 from netseer.src.engine.constants import DEVICE_TYPE, DEVICE_TYPE_LABEL
@@ -130,3 +131,14 @@ async def change_type(device_id: int, request: Request, admin=Depends(require_ad
     rescore(conn, row["analysis_id"])
     audit(conn, admin["id"], "device_type", f"{row['ip']} → {device_type}")
     return redirect("/devices", "ok", f"{row['ip']} is now {DEVICE_TYPE_LABEL[device_type]}.")
+
+
+@router.get("/api/devices/{device_id}/incidents")
+def device_incidents(device_id: int, user=Depends(require_user), conn: sqlite3.Connection = Depends(get_db)):
+    """Incidents that involve one device, for its pop-up on the Devices page."""
+    row = conn.execute("SELECT analysis_id, ip FROM devices WHERE id = ?", (device_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No such device.")
+    return [{"id": i["id"], "title": i["title"], "band": i["band"]}
+            for i in incident_rows(conn, row["analysis_id"])
+            if row["ip"] in i["src_ips"] or row["ip"] in i["dest_ips"]]

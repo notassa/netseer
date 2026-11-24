@@ -90,7 +90,7 @@ login_attempts(username, ts, success)
 sessions(token PK, user_id, csrf, created_at, last_seen, expires_at)   -- 10 min, extendable
 audit_log(id PK, ts, user_id, action, detail, ip, mac)     -- ip/mac of the client for account events
 settings(key PK, value)                                    -- overrides config/netseer.toml
-api_keys(name PK, ciphertext)                              -- Fernet-encrypted (abuseipdb, virustotal, cloud_llm)
+api_keys(name PK, ciphertext)                              -- Fernet-encrypted (abuseipdb, virustotal, openai, claude, deepseek)
 analyses(id PK, name, mode CHECK(mode IN('offline','live')), status, created_at, started_at, stopped_at, note,
          mirror_if, lan_if, eve_offset DEFAULT 0, n_events DEFAULT 0, n_alerts DEFAULT 0, error)
 analysis_files(analysis_id, filename, sha256, size)
@@ -202,7 +202,7 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 ## 7. AI (`ai/`, C3)
 - **llm_caller.py:**
   - `POST http://localhost:11434/api/chat` with `{"model": <setting>, "stream": false, "format": <ExplainOutput JSON schema>, "options": {"temperature": 0.2, "num_ctx": 4096}, "messages": [system, user]}`, timeout 300 s.
-  - Wrapped in an `LLMBackend` interface with `OllamaBackend` and `CloudBackend` (user key, opt-in).
+  - Wrapped in an `LLMBackend` interface with `OllamaBackend` and `CloudBackend` (user key, opt-in). `CloudBackend` per provider: OpenAI `json_schema` + temperature; Claude (`https://api.anthropic.com/v1`) `json_schema` with `strict: true`, no temperature (below 1 is rejected); DeepSeek (`https://api.deepseek.com`) `json_object` with the schema added to the system prompt (it rejects `json_schema` with 400). Errors show `HTTP <status>: <body>` with the key masked.
 - **schemas.py:** `ExplainOutput` = summary, what_happened, why_it_matters, risk_explanation, uncertainty, recommended_actions[{action, reason, refs}], claims[{text, refs}].
 - **prompt_maker.py:**
   - Evidence package with `E#` facts: groups, hosts with device type, each A5 factor, band, score, timeline, TI.
@@ -234,12 +234,12 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 |---|---|---|
 | Setup / Login | First launch: "Create administrator". Otherwise username + password, lockout message | C1 |
 | Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses list in the right half (Name, Mode, Status, Alerts, Created), row click opens a pop-up (open, rename, files, **Info** capture checks (A16), re-analyse or live Reprocess, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop; Traffic Volume chart of the selected analysis below (shared with Home) | C1 / C4 |
-| Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17; outside sources hidden until Internet is clicked, curved links); long service lists fold behind "+N more" | C1–C2 |
-| Alerts | Packets per *x* minutes line chart (Update button), **"Detected Alert Classes"** scrollable horizontal bar chart, filterable table (Alert ID, Time, Source:port, Destination:port, Proto, Class, Severity High…Info; filters: search, IP/prefix/CIDR, SID, port, UTC time range, severity, direction, proto and class ticks, removable chips), row click opens a pop-up with structured details and the raw eve.json + Copy | C1 |
+| Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); row pop-up (details, type, risk, incidents of the device, alert/incident links); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17; outside sources hidden until Internet is clicked, curved links); long service lists fold behind "+N more" | C1–C2 |
+| Alerts | Packets and alerts per *x* minutes line charts (gear pop-up: 1–1000 s/min/h, whole minutes), **"Detected Alert Classes"** scrollable horizontal bar chart, filterable table (Alert ID, Time, Source:port, Destination:port, Proto, Class, Severity High…Info; filters: search, IP/prefix/CIDR, SID, port, UTC time range, severity, direction, proto and class ticks, removable chips), row click opens a pop-up with structured details and the raw eve.json + Copy | C1 |
 | Incidents | Table: Incident ID, band chip, score, title, rule, hosts, span, count. Detail: group timeline (Gantt of group spans, scrollable, steps of 1/5/10/20/40/60 min), **factor breakdown table** (factor, value, why, evidence), raw alerts, "Explain with AI" | C2 |
-| Home | Analysis status card (with total traffic) on top, then health gauge + top 3 contributing devices, Traffic Volume (Total default / Ingress-Egress, 5–3600 s bins), devices at risk, top 5 incidents | C2 |
+| Home | Analysis status card (with total traffic) on top, then health gauge + top 3 contributing devices, Traffic Volume (Total default / Ingress-Egress; gear pop-up bin 1–1000 s/min/h, rounded up to 5 s, max 1000 h; also on Network), devices at risk, top 5 incidents | C2 |
 | AI | Sectioned explanation, Prompt Maker buttons, Prompt section (view + copy), verifier badge, flagged sentences highlighted, ref chips that expand to the evidence; **Saved explanations** list (every generated explanation stays re-openable) | C3 |
-| Information | Admin only: Account activity (time, user, event, IP, MAC, vendor) and Process log (time, level, event, analysis, detail); **Clear log** per tab | C1 |
+| Information | Admin only: **NetSeer details** (default, first tab; memory and disk with %), Account activity (time, user, event, IP, MAC, vendor) and Process log (time, level, event, analysis, detail); **Clear log** per tab | C1 |
 | Settings | One tab per section: Theme (all); Accounts, Configuration, AI (backend + API keys), Knowledge base, MAC vendors (Wireshark list update), **Detonate** factory reset (admin) | C1–C3 |
 
 ## 10. Build order & checkpoints (commit after each step)

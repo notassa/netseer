@@ -61,7 +61,7 @@
   <thead><tr><th data-key="ip">IP</th><th data-key="mac">MAC</th><th data-key="vendor">Vendor</th><th data-key="hostname">Hostname</th><th data-key="services">Services</th><th data-key="type">Type</th><th data-key="risk">Risk</th><th data-key="seen">Seen (UTC)</th></tr></thead>
   <tbody>
   {% for d in devices %}
-  <tr>
+  <tr class="clickable" data-device="{{ d.id }}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Open details for device {{ d.ip }}" title="Show device details">
     <td>{{ d.ip }}</td>
     <td>{{ unk(d.mac) }}</td>
     <td>{{ unk(d.vendor) }}</td>
@@ -156,6 +156,52 @@
     </form>
   </div>
 </div>
+{% endif %}
+{% if selected %}
+<div class="modal-backdrop" id="device-modal" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
+  <div class="modal">
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem">
+      <h2 id="device-modal-title" style="margin:0">Device</h2>
+      <button class="btn small" id="device-close" type="button">Close</button>
+    </header>
+    <div id="device-body"></div>
+  </div>
+</div>
+{% for d in devices %}
+<div class="device-popup" id="device-popup-{{ d.id }}" hidden>
+  <table class="data">
+    <tbody>
+      <tr><th>IP</th><td>{{ d.ip }}</td></tr>
+      <tr><th>MAC</th><td>{{ unk(d.mac) }}</td></tr>
+      <tr><th>Vendor</th><td>{{ unk(d.vendor) }}</td></tr>
+      <tr><th>Hostname</th><td>{{ unk(d.hostname) }}</td></tr>
+      <tr><th>Services</th><td>{{ services(d.services) }}</td></tr>
+      <tr><th>Type</th><td>
+        {% if user.role == "admin" %}
+        <form method="post" action="/devices/{{ d.id }}/type">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <select name="type" aria-label="Device type for {{ d.ip }}">
+            {% for key, label in types.items() %}<option value="{{ key }}" {{ 'selected' if d.type == key }}>{{ label }}</option>{% endfor %}
+          </select>
+          <button class="btn small primary" type="submit">Save type</button>
+        </form>
+        {% else %}{{ types[d.type] }}{% endif %}
+        {% if not d.attributed %}<span class="badge warn">not attributed</span>{% endif %}
+      </td></tr>
+      <tr><th>Risk</th><td><span class="band {{ d.risk_label | lower }}">{{ '%.0f' | format(100 * d.risk) }}%</span></td></tr>
+      <tr><th>First seen</th><td>{{ (d.first_seen or '')[:19] | replace('T', ' ') }}</td></tr>
+      <tr><th>Last seen</th><td>{{ (d.last_seen or '')[:19] | replace('T', ' ') }}</td></tr>
+    </tbody>
+  </table>
+  <h3>Incidents</h3>
+  <div class="device-incidents"></div>
+  <p>
+    <a href="/alerts?src_ip={{ d.ip | urlencode }}">Alerts from this device</a><br>
+    <a href="/alerts?dest_ip={{ d.ip | urlencode }}">Alerts to this device</a><br>
+    <a href="/incidents?q={{ d.ip | urlencode }}">Incidents</a>
+  </p>
+</div>
+{% endfor %}
 {% endif %}
 {% endblock %}
 
@@ -372,6 +418,87 @@
   if (open) open.addEventListener("click", () => modal.classList.add("open"));
   document.getElementById("close-attribution").addEventListener("click", () => modal.classList.remove("open"));
   document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
+})();
+</script>
+<script>
+(function () {
+  const backdrop = document.getElementById("device-modal");
+  if (!backdrop) return;
+  const title = document.getElementById("device-modal-title");
+  const body = document.getElementById("device-body");
+  const closeBtn = document.getElementById("device-close");
+  let activeRow = null, reqId = 0;
+
+  function bandChip(band) {
+    const s = document.createElement("span");
+    s.className = "band " + String(band || "note").toLowerCase();
+    s.textContent = band || "not scored";
+    return s;
+  }
+
+  function fillIncidents(container, id) {
+    const mine = ++reqId;
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Loading…";
+    container.replaceChildren(p);
+    getJSON(`/api/devices/${id}/incidents`).then(incs => {
+      if (mine !== reqId) return;
+      if (!incs.length) {
+        const m = document.createElement("p");
+        m.className = "muted";
+        m.textContent = "No incidents involve this device.";
+        container.replaceChildren(m);
+        return;
+      }
+      const ul = document.createElement("ul");
+      for (const i of incs) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = `/incidents/${i.id}`;
+        a.appendChild(bandChip(i.band));
+        a.appendChild(document.createTextNode(" " + i.title));
+        li.appendChild(a);
+        ul.appendChild(li);
+      }
+      container.replaceChildren(ul);
+    }).catch(e => {
+      if (mine !== reqId) return;
+      container.textContent = `Could not load incidents: ${e.message}`;
+    });
+  }
+
+  function open(row) {
+    activeRow = row;
+    const content = document.getElementById("device-popup-" + row.dataset.device);
+    title.textContent = "Device " + row.cells[0].textContent.trim();
+    body.innerHTML = content ? content.innerHTML : "";
+    const incs = body.querySelector(".device-incidents");
+    if (incs) fillIncidents(incs, row.dataset.device);
+    backdrop.classList.add("open");
+    closeBtn.focus();
+  }
+  function closeModal() {
+    backdrop.classList.remove("open");
+    if (activeRow) activeRow.focus();
+  }
+  document.querySelectorAll("tr[data-device]").forEach(row => {
+    row.addEventListener("click", e => {
+      if (e.target.closest("form, select, button, a, input")) return;
+      open(row);
+    });
+    row.addEventListener("keydown", e => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.target.closest("form, select, button, a, input")) return;
+      e.preventDefault();
+      open(row);
+    });
+  });
+  closeBtn.addEventListener("click", closeModal);
+  backdrop.addEventListener("click", e => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && backdrop.classList.contains("open")) closeModal();
+  });
 })();
 </script>
 {% endblock %}

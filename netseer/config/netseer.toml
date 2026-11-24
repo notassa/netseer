@@ -9,7 +9,7 @@ lan_cidrs = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]   # RFC1918
 max_upload_mb = 2048           # per file (owner captures: 700 MB–1.87 GB)
 llm_backend = "ollama"           # "ollama" | "cloud"
 llm_model = "llama3.2:3b"
-cloud_url = "https://api.openai.com/v1"   # any OpenAI-compatible API (opt-in, user's key)
+cloud_provider = "openai"          # "openai" | "claude" | "deepseek" (opt-in, the provider's own key)
 cloud_model = ""
 retention_days = 0               # 0 = keep all analyses
 inside_rules = true              # A3: EXTERNAL_NET=any so ET rules also fire for an attacker inside the LAN
