@@ -3,8 +3,9 @@
 Confidence, strongest first:
   certain      802.1Q VLAN tags; a DHCP subnet mask (with its router)
   strong       a directed broadcast (unanswered traffic to an address whose host bits are all 1);
-               the gateway, i.e. the internal IP owning the MAC that internal traffic leaves through
-  probable     remaining active internal hosts grouped by /24
+               the gateway, i.e. the internal IP owning the MAC that internal traffic leaves through;
+               an IPv6 router advertisement whose MAC is an IPv4 device
+  probable     remaining active internal hosts grouped by /24; ARP: an address many hosts ask for
   looks local  outside the LAN CIDRs, but hosts there talk to each other or to other outside networks,
                so the capture point sits inside it (e.g. UNSW-NB15's 149.171.126.0/24)
 """
@@ -28,6 +29,8 @@ BROADCAST_MIN_FLOWS = 2
 GATEWAY_MIN_SHARE = 0.2                 # a MAC carrying ≥ 20 % of internal↔Internet flows is a gateway
 LOCAL_MIN_HOSTS = 3                     # outside /24 with this many hosts talking among outside networks
 WIDEST_PREFIX = 16                      # a VLAN spread wider than this is listed per /24 instead
+ARP_MIN_ASKERS = 3                      # distinct internal hosts asking "who has" one IP
+GATEWAY_SUFFIXES = (1, 254)             # usual last octets of a gateway address
 
 
 @dataclass
@@ -40,6 +43,7 @@ class Net:
     vlans: set[int] = field(default_factory=set)
     gateway: str | None = None
     gateway_mac: str | None = None
+    gateway6: str | None = None
     hosts: set[str] = field(default_factory=set)
 
 
@@ -90,6 +94,7 @@ class _Found:
         net.vlans |= extra.get("vlans", set())
         net.gateway = net.gateway or extra.get("gateway")
         net.gateway_mac = net.gateway_mac or extra.get("gateway_mac")
+        net.gateway6 = net.gateway6 or extra.get("gateway6")
         return net
 
 
@@ -151,6 +156,31 @@ def discover(conn: sqlite3.Connection, analysis_id: int, evidence: NetEvidence |
                 found.add(prefix, "strong" if prefix not in found.nets else found.nets[prefix].confidence,
                           f"gateway {ip} ({mac}) carries {100 * n / total:.0f}% of the traffic to and from the Internet",
                           gateway=ip, gateway_mac=mac)
+        for ip6, mac in evidence.routers6.items():
+            v4 = sorted(mac_ips.get(mac, []), key=ipaddress.ip_address)[:1]
+            if not v4:
+                continue
+            v4 = v4[0]
+            prefix = min((p for p in found.nets if _v4(v4) in p), key=lambda p: p.prefixlen,
+                         default=ipaddress.ip_network(f"{v4}/24", strict=False))
+            found.add(prefix, "strong" if prefix not in found.nets else found.nets[prefix].confidence,
+                      f"IPv6 router advertisement from {ip6} ({mac}); the same MAC is {v4}",
+                      gateway=v4, gateway_mac=mac, gateway6=ip6)
+        by24: dict[ipaddress.IPv4Network, dict[str, set[str]]] = defaultdict(dict)
+        for target, askers in evidence.arp_askers.items():
+            if (addr := _v4(target)):
+                by24[ipaddress.ip_network(f"{addr}/24", strict=False)][target] = askers
+        for net24, targets in by24.items():
+            candidates = {t: a for t, a in targets.items() if len(a) >= ARP_MIN_ASKERS}
+            if not candidates:
+                continue
+            target = min(candidates, key=lambda t: (int(t.rsplit(".", 1)[1]) not in GATEWAY_SUFFIXES,
+                                                    -len(candidates[t]), ipaddress.ip_address(t)))
+            prefix = min((p for p in found.nets if _v4(target) in p), key=lambda p: p.prefixlen, default=net24)
+            found.add(prefix, "probable" if prefix not in found.nets else found.nets[prefix].confidence,
+                      f"ARP: {len(candidates[target])} hosts asked who has {target}"
+                      + (" (a usual gateway address)" if int(target.rsplit(".", 1)[1]) in GATEWAY_SUFFIXES else ""),
+                      gateway=target, gateway_mac=devices.get(target) or None)
     for ip in devices:
         addr = _v4(ip)
         if not any(addr in p for p in found.nets):
@@ -213,7 +243,7 @@ def run_discovery(conn: sqlite3.Connection, analysis_id: int, evidence: NetEvide
         "INSERT INTO analysis_info(analysis_id, kind, level, title, detail_json, created_at) VALUES (?, 'network', ?, ?, ?, ?)",
         [(analysis_id, "info" if n.confidence != "looks local" else "warning", str(n.prefix), json.dumps({
             "prefix": str(n.prefix), "confidence": n.confidence, "evidence": n.evidence, "vlans": sorted(n.vlans),
-            "gateway": n.gateway, "gateway_mac": n.gateway_mac, "hosts": len(n.hosts),
+            "gateway": n.gateway, "gateway_mac": n.gateway_mac, "gateway6": n.gateway6, "hosts": len(n.hosts),
             "sample": sorted(n.hosts, key=ipaddress.ip_address)[:10],
             "in_lan": any(n.prefix.subnet_of(l) for l in lan if l.version == 4)}), now) for n in nets])
     conn.execute("COMMIT")

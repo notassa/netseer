@@ -279,6 +279,24 @@ def test_home_shows_traffic_volume_not_alert_trend(analysed):
     assert "Alert trend" not in page
 
 
+def test_home_traffic_volume_defaults_to_total(analysed):
+    client, _ = analysed
+    page = client.get("/").text
+    assert page.index('id="traffic-mode-total"') < page.index('id="traffic-mode-ie"')
+    total = page.split('id="traffic-mode-total"', 1)[1].split(">", 1)[0]
+    assert 'aria-pressed="true"' in total
+
+
+def test_network_shows_traffic_volume_and_shared_chart(analysed):
+    client, _ = analysed
+    page = client.get("/network").text
+    assert "Traffic Volume" in page
+    assert "/static/js/traffic.js" in page
+    js = client.get("/static/js/traffic.js")
+    assert js.status_code == 200
+    assert "trafficChart" in js.text
+
+
 def test_format_total_bytes(analysed):
     assert format_total(999, 0, "byte") == ("999 B", "Total bytes")
     assert format_total(7773808617, 0, "byte") == ("7.77 GB", "Total bytes")

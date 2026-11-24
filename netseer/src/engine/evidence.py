@@ -1,11 +1,13 @@
 """Network evidence gathered while the logger streams eve.json (CONCEPTS A17).
 
 Kept small and bounded: VLAN tags per IP, DHCP subnet options, the MACs that internal traffic leaves through
-(gateways), unanswered destinations that may be directed broadcasts, and per-pair traffic for the network map.
+(gateways), unanswered destinations that may be directed broadcasts, per-pair traffic for the network map, ARP
+"who has" askers, and IPv6 router advertisements.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
@@ -14,6 +16,8 @@ from typing import Any, Callable
 MAX_LINKS = 200_000              # distinct host pairs kept for the map
 MAX_VLAN_IPS = 100_000
 MAX_VLANS_PER_IP = 4
+MAX_ARP_TARGETS = 10_000          # distinct ARP "who has" targets kept
+MAX_ARP_ASKERS = 64               # askers kept per target
 
 
 def _macs(ether: dict[str, Any], side: str) -> list[str]:
@@ -30,6 +34,8 @@ class NetEvidence:
     gateway_macs: Counter = field(default_factory=Counter)
     unanswered: Counter = field(default_factory=Counter)           # destination IP → flows without a reply
     links: dict[tuple[str, str], list] = field(default_factory=dict)   # (a, b) → [flows, bytes, first, last]
+    arp_askers: dict[str, set[str]] = field(default_factory=dict)  # target IP → asker IPs
+    routers6: dict[str, str] = field(default_factory=dict)          # compressed IPv6 → MAC
 
     def observe(self, event: dict[str, Any], etype: str | None, internal: Callable[[str | None], bool],
                 times: list[str | None]) -> None:
@@ -48,10 +54,30 @@ class NetEvidence:
                 self.dhcp.setdefault(key, {"mask": dhcp["subnet_mask"], "routers": list(dhcp.get("routers") or []),
                                            "ip": dhcp.get("assigned_ip") or dhcp.get("client_ip"),
                                            "server": src})
+        if etype == "arp":
+            a = event.get("arp") or {}
+            if a.get("opcode") == "request":
+                asker, target = a.get("src_ip"), a.get("dest_ip")
+                if asker and asker != "0.0.0.0" and asker != target and internal(target) and internal(asker):
+                    askers = self.arp_askers.get(target)
+                    if askers is None:
+                        if len(self.arp_askers) >= MAX_ARP_TARGETS:
+                            return
+                        askers = self.arp_askers[target] = set()
+                    if len(askers) < MAX_ARP_ASKERS:
+                        askers.add(asker)
+            return
         if etype != "flow" or not src or not dest:
             return
         flow = event.get("flow") or {}
         ether = event.get("ether") or {}
+        if event.get("proto") == "IPv6-ICMP" and event.get("icmp_type") == 134:
+            macs = _macs(ether, "src")
+            if macs:
+                try:
+                    self.routers6.setdefault(ipaddress.ip_address(src).compressed, macs[0])
+                except ValueError:
+                    pass
         if internal(src) and not internal(dest):
             self.gateway_macs.update(_macs(ether, "dest"))
         elif internal(dest) and not internal(src):

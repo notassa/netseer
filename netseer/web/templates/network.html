@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "macros.html" import reset_sort %}
+{% from "macros.html" import reset_sort, traffic_card %}
 {% block title %}Network{% endblock %}
 {% block content %}
 <h1>Network</h1>
@@ -91,6 +91,9 @@
     {% endif %}
   </div>
 </div>
+{% if selected and traffic %}
+{{ traffic_card(traffic, subtitle=selected.name) }}
+{% endif %}
 {% endblock %}
 
 {% block modals %}
@@ -188,6 +191,18 @@
 {% endblock %}
 
 {% block scripts %}
+{% if selected and traffic %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/js/traffic.js"></script>
+<script>
+(function () {
+  const css = getComputedStyle(document.documentElement);
+  const v = n => css.getPropertyValue(n).trim();
+  Chart.defaults.color = v("--muted"); Chart.defaults.borderColor = v("--border");
+  trafficChart({{ traffic | tojson }}, "{{ data_unit }}", {{ selected.id }});
+})();
+</script>
+{% endif %}
 <script>
 // Poll running jobs. When the selected analysis finishes and awaits attribution, open Devices (its modal);
 // otherwise reload to show the final status.

@@ -12,6 +12,28 @@
 <button class="btn" type="button" data-reset-sort="{{ table_id }}" title="Back to the default order">Reset order</button>
 {%- endmacro %}
 
+{# Traffic Volume chart card (Home + Network); `subtitle` is shown muted after the heading. #}
+{% macro traffic_card(traffic, subtitle=None) -%}
+<div class="card">
+  <h2 style="margin-top:0">Traffic Volume{% if subtitle %} <span class="muted">{{ subtitle }}</span>{% endif %}</h2>
+  {% if traffic.points %}
+  <div class="row-actions" style="margin-bottom:.5rem;align-items:center">
+    <button type="button" class="btn small primary" id="traffic-mode-total" aria-pressed="true">Total</button>
+    <button type="button" class="btn small" id="traffic-mode-ie" aria-pressed="false">Ingress-Egress</button>
+    <label for="traffic-bin" style="margin:0">Bin size (seconds)</label>
+    <input id="traffic-bin" type="number" min="5" max="3600" step="5" value="{{ traffic.seconds }}" style="width:7rem">
+    <button type="button" class="btn small" id="traffic-bin-reset">Reset</button>
+    <span class="muted" id="traffic-bin-note" role="status"></span>
+  </div>
+    <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
+  {% elif traffic.needs_reanalysis %}
+    <p class="muted">Re-analyse this analysis to see traffic volume.</p>
+  {% else %}
+    <p class="muted">No traffic in this analysis.</p>
+  {% endif %}
+</div>
+{%- endmacro %}
+
 {# Risk band chip (Note / Low / Medium / High / Critical). #}
 {% macro band_chip(band) -%}
 <span class="band {{ (band or 'note') | lower }}">{{ band or 'not scored' }}</span>

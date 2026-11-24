@@ -23,6 +23,13 @@ def flow(src, dest, *, reply=True, vlan=None, src_mac="aa:aa:aa:00:00:01", dest_
     return event
 
 
+def arp(src, dest, opcode="request"):
+    return {"event_type": "arp", "ether": {},
+            "arp": {"hw_type": "ethernet", "proto_type": "ipv4", "opcode": opcode,
+                    "src_mac": "20:53:83:58:7e:78", "src_ip": src,
+                    "dest_mac": "00:00:00:00:00:00", "dest_ip": dest}}
+
+
 def device(conn, ip, mac=None):  # noqa: F811
     conn.execute("INSERT INTO devices(analysis_id, ip, mac, attributed) VALUES (1, ?, ?, 1)", (ip, mac))
 
@@ -118,3 +125,57 @@ def test_few_outside_hosts_are_not_adopted(conn):  # noqa: F811
     for i in range(7):
         device(conn, f"10.0.0.{i + 1}")                        # a real LAN with more hosts
     assert networks.to_adopt(conn, 1, networks.run_discovery(conn, 1)) == []
+
+
+def test_evidence_collects_arp_askers_and_router_advertisements():
+    ev = NetEvidence()
+    ts = ["2026-10-21T09:00:00+00:00"]
+    ev.observe(arp("10.0.5.1", "10.0.5.24"), "arp", internal, ts)
+    ev.observe(arp("10.0.5.2", "10.0.5.24"), "arp", internal, ts)
+    ev.observe(arp("10.0.5.2", "10.0.5.24"), "arp", internal, ts)            # duplicate asker: one entry
+    ev.observe(arp("10.0.5.24", "10.0.5.24"), "arp", internal, ts)           # gratuitous: ignored
+    ev.observe(arp("0.0.0.0", "10.0.5.24"), "arp", internal, ts)             # unspecified: ignored
+    ev.observe(arp("10.0.5.9", "10.0.5.24", opcode="reply"), "arp", internal, ts)   # reply: ignored
+    assert ev.arp_askers == {"10.0.5.24": {"10.0.5.1", "10.0.5.2"}}
+    ra = {"event_type": "flow", "src_ip": "fe80:0000:0000:0000:0000:0000:0000:0001",
+          "dest_ip": "ff02:0000:0000:0000:0000:0000:0000:0001", "ip_v": 6, "proto": "IPv6-ICMP",
+          "icmp_type": 134, "icmp_code": 0,
+          "ether": {"dest_macs": ["33:33:00:00:00:01"], "src_macs": ["20:53:83:58:7e:78"]}, "flow": {}}
+    ev.observe(ra, "flow", internal, ts)
+    assert ev.routers6 == {"fe80::1": "20:53:83:58:7e:78"}
+
+
+def test_arp_finds_gateway_by_askers(conn):  # noqa: F811
+    conn.execute("UPDATE settings SET value = '[\"10.0.0.0/16\"]' WHERE key = 'lan_cidrs'")
+    ev = NetEvidence()
+    ev.arp_askers = {
+        "10.0.5.1": {"10.0.5.10", "10.0.5.11", "10.0.5.12"},                  # 3 askers, suffix .1
+        "10.0.5.50": {"10.0.5.10", "10.0.5.11", "10.0.5.12", "10.0.5.13"},    # 4 askers, not a suffix
+        "10.0.6.7": {"10.0.6.10", "10.0.6.11"},                               # 2 askers: not enough
+        "10.0.7.9": {"10.0.7.10", "10.0.7.11", "10.0.7.12"},                  # 3 askers
+    }
+    nets = by_prefix(networks.discover(conn, 1, ev))
+    assert nets["10.0.5.0/24"].gateway == "10.0.5.1"                          # suffix beats 4 askers
+    assert "10.0.6.0/24" not in nets
+    assert nets["10.0.7.0/24"].gateway == "10.0.7.9"
+
+
+def test_router_advertisement_links_ipv6_to_ipv4_gateway(conn):  # noqa: F811
+    conn.execute("UPDATE settings SET value = '[\"10.0.0.0/16\"]' WHERE key = 'lan_cidrs'")
+    device(conn, "10.0.8.1", "20:53:83:58:7e:78")
+    device(conn, "10.0.8.5")
+    ev = NetEvidence()
+    ev.routers6 = {"fe80::1": "20:53:83:58:7e:78"}
+    net = by_prefix(networks.discover(conn, 1, ev))["10.0.8.0/24"]
+    assert net.gateway == "10.0.8.1" and net.gateway6 == "fe80::1" and net.confidence == "strong"
+
+
+def test_dhcp_router_beats_arp_gateway(conn):  # noqa: F811
+    conn.execute("UPDATE settings SET value = '[\"10.0.0.0/16\"]' WHERE key = 'lan_cidrs'")
+    ev = NetEvidence()
+    ev.dhcp = {("255.255.255.0", ("10.0.9.1",)): {"mask": "255.255.255.0", "routers": ["10.0.9.1"],
+                                                  "ip": "10.0.9.23", "server": "10.0.9.1"}}
+    ev.arp_askers = {"10.0.9.254": {"10.0.9.10", "10.0.9.11", "10.0.9.12"}}
+    net = by_prefix(networks.discover(conn, 1, ev))["10.0.9.0/24"]
+    assert net.gateway == "10.0.9.1"                                          # DHCP router keeps priority
+    assert any(e.startswith("ARP: 3 hosts asked who has 10.0.9.254") for e in net.evidence)

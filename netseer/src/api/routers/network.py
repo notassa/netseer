@@ -11,6 +11,7 @@ from starlette.requests import ClientDisconnect
 
 from netseer.src.api.deps import (ANALYSIS_COOKIE, get_db, layout_context, redirect, render, require_admin,
                                   require_user, set_cookie, verify_csrf, verify_csrf_header)
+from netseer.src.api.routers.alerts import traffic_series
 from netseer.src.config import get_setting
 from netseer.src.database.db import audit
 from netseer.src.engine import ingest, live
@@ -42,11 +43,14 @@ def network_page(request: Request, user=Depends(require_user), conn: sqlite3.Con
     info: dict[int, list] = {}
     for r in conn.execute("SELECT * FROM analysis_info WHERE kind = 'capture' ORDER BY id"):
         info.setdefault(r["analysis_id"], []).append(r)
+    ctx = layout_context(request, conn, "network")
     return render(request, "network.html", {
-        **layout_context(request, conn, "network"),
+        **ctx,
         "rows": rows,
         "files": files,
         "info": info,
+        "traffic": traffic_series(conn, ctx["selected"]["id"]) if ctx["selected"] else None,
+        "data_unit": get_setting(conn, "data_unit"),
         "sessions": [r for r in rows if r["mode"] == "offline" and r["status"] not in ingest.ACTIVE_STATUSES],
         "max_upload_mb": get_setting(conn, "max_upload_mb"),
         "active_statuses": ingest.ACTIVE_STATUSES + live.OPEN_STATES,

@@ -27,7 +27,7 @@
   </div>
   <div class="netmap-wrap">
     <div id="netmap" class="netmap" aria-label="Network map"></div>
-    <aside class="netmap-panel" id="map-panel"><p class="muted">Internet → networks → gateway → hosts. Left-click a host to select it and see its alert links (red); left-click empty space to hide them. Hold the right button and drag to move the map. Left-drag a node to move it with everything under it. Scroll to zoom.</p></aside>
+    <aside class="netmap-panel" id="map-panel"><p class="muted">Internet → networks → gateway → hosts. Left-click a host to select it and see its alert links (red); left-click empty space to hide them. Hold the right button and drag to move the map. Left-drag a node to move it with everything under it. Scroll to zoom. Click Internet to show or hide outside sources; while hidden, their links go to Internet.</p></aside>
   </div>
   <div class="field-hint">Coloured circles are your devices (by risk), grey circles hosts of networks found in the traffic, diamonds outside sources; red links (shown for the clicked host) carried alerts, thicker ones more data.</div>
 </div>
@@ -171,6 +171,7 @@
   const mb = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} kB` : `${n} B`;
   const types = {{ types | tojson }};
   let cy;
+  let extShown = false, outsideCount = 0;
 
   const style = [
     { selector: "node", style: { "label": "data(label)", "font-size": 9, "min-zoomed-font-size": 7, "color": v("--text"), "text-wrap": "wrap",
@@ -193,7 +194,8 @@
     { selector: "node[alerts > 0][kind != 'device']", style: { "border-width": 2, "border-color": v("--danger") } },
     { selector: "edge", style: { "curve-style": "bezier", "width": 1, "line-color": v("--border"), "opacity": .8 } },
     { selector: "edge.tree", style: { "line-style": "dashed", "width": 1, "opacity": .6 } },
-    { selector: "edge.link", style: { "width": "data(width)", "line-color": v("--muted"), "opacity": .55 } },
+    { selector: "edge.link", style: { "width": "data(width)", "line-color": v("--muted"), "opacity": .55,
+        "curve-style": "unbundled-bezier", "control-point-distances": 30, "control-point-weights": 0.5 } },
     { selector: "edge.alert", style: { "line-color": v("--danger"), "opacity": .7 } },
     { selector: ":selected", style: { "overlay-color": v("--accent"), "overlay-opacity": .25, "overlay-padding": 4 } },
   ];
@@ -203,7 +205,8 @@
   function treePositions() {
     const pos = {}, COL = 74, ROW = 48, PER_ROW = 5, GAP = 70;
     const blocks = cy.nodes("[kind = 'network']").map(n => [n, n.outgoers("edge.tree").targets()]);
-    const outside = cy.getElementById("internet").outgoers("edge.tree").targets("[kind = 'external']");
+    const outside = cy.getElementById("internet").outgoers("edge.tree").targets("[kind = 'external']")
+      .filter(n => n.style("display") !== "none");
     if (outside.length) blocks.push([null, outside]);
     let x = 0;
     blocks.forEach(([head, kids]) => {
@@ -225,11 +228,48 @@
     cy.layout({ name: "preset", positions: n => pos[n.id()] || { x: 0, y: 0 }, fit: true, padding: 20 }).run();
   }
 
+  // One proxy edge per internal node that talks to outside sources; real links touching outside are marked "offnet".
+  function buildProxies() {
+    const agg = new Map();
+    cy.edges(".link").forEach(e => {
+      const s = e.source(), t = e.target();
+      const sExt = s.data("kind") === "external", tExt = t.data("kind") === "external";
+      if (!sExt && !tExt) return;
+      e.addClass("offnet");
+      if (sExt && tExt) return;
+      const id = (sExt ? t : s).id();
+      const p = agg.get(id) || { flows: 0, bytes: 0, alerts: 0, width: 0 };
+      p.flows += e.data("flows") || 0;
+      p.bytes += e.data("bytes") || 0;
+      p.alerts += e.data("alerts") || 0;
+      p.width = Math.max(p.width, e.data("width") || 0);
+      agg.set(id, p);
+    });
+    agg.forEach((p, id) => cy.add({ data: { id: `p:${id}`, source: "internet", target: id, flows: p.flows,
+        bytes: p.bytes, alerts: p.alerts, width: p.width }, classes: "link proxy" + (p.alerts ? " alert" : "") }));
+  }
+
+  // Toggle outside sources and their proxies, then re-lay out only the visible outside nodes.
+  function applyExt() {
+    const outside = cy.nodes("[kind = 'external']");
+    outside.style("display", extShown ? "element" : "none");
+    outside.connectedEdges(".tree").style("display", extShown ? "element" : "none");
+    if (extShown) {
+      cy.edges(".link.offnet").style("display", "element");
+      cy.edges(".proxy").style("display", "none");
+    } else {
+      cy.edges(".link.offnet").style("display", "none");
+      cy.edges(".proxy").style("display", "element");
+    }
+    run();
+  }
+
   // Traffic links stay hidden; a clicked host shows only its links that carried alerts.
   function showAlertLinks(node) {
     cy.edges(".link").style("display", "none");
     if (node && node.isNode() && !["network", "internet"].includes(node.data("kind"))) {
-      node.connectedEdges(".alert").style("display", "element");
+      const alerts = node.connectedEdges(".link.alert");
+      (extShown ? alerts.not(".proxy") : alerts.not(".offnet")).style("display", "element");
     }
   }
 
@@ -244,6 +284,12 @@
     const d = el.data();
     if (el.isEdge()) {
       if (el.hasClass("tree")) return;
+      if (el.hasClass("proxy")) {
+        panel.innerHTML = `<h3>${esc(d.target)} ↔ outside sources</h3><p>${d.flows} flows · ${mb(d.bytes)} · ${d.alerts} alerts</p>
+          <p><a href="/alerts?src_ip=${encodeURIComponent(d.target)}">Alerts from ${esc(d.target)}</a><br>
+          <a href="/alerts?dest_ip=${encodeURIComponent(d.target)}">Alerts to ${esc(d.target)}</a></p>`;
+        return;
+      }
       panel.innerHTML = `<h3>${esc(d.source)} ↔ ${esc(d.target)}</h3><p>${d.flows} flows · ${mb(d.bytes)} · ${d.alerts} alerts</p>
         <p><a href="/alerts?src_ip=${encodeURIComponent(d.source)}&dest_ip=${encodeURIComponent(d.target)}">Alerts ${esc(d.source)} → ${esc(d.target)}</a><br>
         <a href="/alerts?src_ip=${encodeURIComponent(d.target)}&dest_ip=${encodeURIComponent(d.source)}">Alerts ${esc(d.target)} → ${esc(d.source)}</a></p>`;
@@ -254,7 +300,7 @@
         ${d.gateway ? `<p>Gateway ${esc(d.gateway)}</p>` : ""}<ul>${(d.evidence || []).map(e => `<li>${esc(e)}</li>`).join("")}</ul>`;
       return;
     }
-    if (d.kind === "internet") { panel.innerHTML = "<h3>Internet</h3><p>Outside sources hang off this node.</p>"; return; }
+    if (d.kind === "internet") { panel.innerHTML = `<h3>Internet</h3><p>${outsideCount} outside sources (${extShown ? "shown" : "hidden"}). Click this node to ${extShown ? "hide" : "show"} them.</p>`; return; }
     const rows = [["Type", d.type ? types[d.type] : (d.kind === "external" ? "outside source" : "host (not a device)")],
                   ["Risk", d.risk != null ? `${d.risk}%` : null], ["Hostname", d.hostname], ["MAC", d.mac], ["Vendor", d.vendor],
                   ["Network", d.network], ["Traffic", mb(d.bytes || 0)], ["Alerts", d.alerts]];
@@ -266,12 +312,14 @@
 
   getJSON(`/api/analyses/{{ selected.id }}/map`).then(data => {
     const s = data.summary;
+    outsideCount = s.outside;
     document.getElementById("map-summary").textContent = `${s.networks} networks · ${s.hosts} hosts · ${s.outside} outside sources`
       + (s.folded ? ` (${s.folded} folded)` : "") + ` · ${s.links} of ${s.links_total} links`
       + (s.partial ? " · links from alerts only; re-analyse for all traffic" : "");
     cy = cytoscape({ container: box, elements: [...data.nodes, ...data.edges], style,
                      minZoom: 0.1, maxZoom: 4, userPanningEnabled: false, userZoomingEnabled: false,
                      boxSelectionEnabled: false });
+    buildProxies();
     // Scroll to zoom around the pointer (Cytoscape's own wheel zoom stops working once user panning is off).
     box.addEventListener("wheel", e => {
       e.preventDefault();
@@ -289,7 +337,13 @@
       pan = { x: e.clientX, y: e.clientY };
     });
     window.addEventListener("mouseup", e => { if (e.button === 2) pan = null; });
-    cy.on("tap", "node, edge", e => { show(e.target); if (e.target.isNode()) showAlertLinks(e.target); });
+    cy.on("tap", "node, edge", e => {
+      if (e.target.isNode() && e.target.data("kind") === "internet") {
+        extShown = !extShown; applyExt(); show(e.target); showAlertLinks(e.target); return;
+      }
+      show(e.target);
+      if (e.target.isNode()) showAlertLinks(e.target);
+    });
     cy.on("tap", e => { if (e.target === cy) showAlertLinks(null); });
     // Children follow a dragged parent.
     let drag = null;
@@ -301,7 +355,7 @@
       drag.pos = { ...p };
     });
     cy.on("free", "node", () => { drag = null; });
-    run();
+    applyExt();
     showAlertLinks(null);
   }).catch(e => { box.textContent = `Could not load the map: ${e.message}`; });
 
