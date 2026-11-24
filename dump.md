@@ -7,8 +7,12 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 - Prompt "read dump.md #Inbox"
 
 ## Inbox
+- Make that Live Mode stores the pcap, & its traffic record can be reanalyzed.
+- make outbound from netseer machine ip & connection from tailscale don't trigger alert.
 
 ## Reviewed
+- [2026-11-24] Network: Traffic Source left, Analyses list right, row pop-up → conflicted with A10/brief §9; done → CONCEPTS A10, brief §9 → 1e01d12
+- [2026-11-24] Alerts: new columns, row pop-up, copy raw eve.json → conflicted with A10/brief §9; done, Signature and Direction moved to the pop-up, incident page keeps its drawer → CONCEPTS A10, brief §9 → 1e01d12
 - [2026-11-24] LAN CIDRs auto from local subnet → conflicted with A15; done for live sessions, custom list wins, offline unchanged → CONCEPTS A15 → e4d48f7
 - [2026-11-24] Decay / half-life → mostly done; demo default 3 h, production 7 days, health fades on read; Elastic 30 days recorded as a window → CONCEPTS A5.4/A15 → e4d48f7
 - [2026-11-24] Remove I1 from impact, criticality as device weight (Option B) → conflicted with A5.2/A5.4; done, applied once at network step → CONCEPTS A5.2/A5.4/A5.6 → e4d48f7
