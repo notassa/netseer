@@ -166,6 +166,79 @@ def test_alert_tick_filters_combine_values(analysed):
     assert page_qs({"priority": ["1", "3"], "page": "2"}) == "priority=1&priority=3"           # paging keeps ticks
 
 
+def _matching(client, url: str) -> int:
+    return int(client.get(url).text.split("Alert table", 1)[1].split("(", 1)[1].split(" matching")[0])
+
+
+def test_alert_ip_filters_exact_prefix_and_cidr(analysed):
+    client, conn = analysed
+    for i, ip in enumerate(("10.0.0.1", "10.0.0.10"), start=1):
+        conn.execute("INSERT INTO alerts(analysis_id, ts, src_ip, src_port, dest_ip, dest_port, proto, sid, priority, raw_json) "
+                     "VALUES (1, '2025-10-09T10:20:00.000000+0000', ?, 1, '10.0.0.9', 2, 'TCP', ?, 1, '{}')",
+                     (ip, 9000 + i))
+    conn.commit()
+    assert _matching(client, "/alerts?src_ip=10.0.0.1") == 1          # exact; 10.0.0.10 must not match
+    assert _matching(client, "/alerts?src_ip=10.0.0.") == 2           # partial prefix
+    assert _matching(client, "/alerts?src_ip=10.0.0.0%2F24") == 2     # CIDR covers both
+
+
+def test_alert_port_and_time_range_filters(analysed):
+    client, _ = analysed
+    assert _matching(client, "/alerts?port=80") == 2                   # src_port on one row, dest_port on another
+    assert _matching(client, "/alerts?ts_from=2025-10-09T10:15&ts_to=2025-10-09T10:15") == 1  # to-minute is inclusive
+    assert _matching(client, "/alerts?ts_from=2025-10-09T10:15") == 2
+
+
+def test_alert_invalid_typed_filters_are_ignored(analysed):
+    client, _ = analysed
+    page = client.get("/alerts?sid=abc").text
+    assert _matching(client, "/alerts?sid=abc") == 4                   # invalid sid dropped, all rows returned
+    assert "Ignored" in page and "SID &#34;abc&#34;" in page
+    assert "1 active" not in page
+    page = client.get("/alerts?port=notaport").text
+    assert _matching(client, "/alerts?port=notaport") == 4
+    assert "Ignored" in page and "Port &#34;notaport&#34;" in page
+    assert "1 active" not in page
+
+
+def test_alert_proto_tick_and_filter_chips(analysed):
+    client, conn = analysed
+    conn.execute("INSERT INTO alerts(analysis_id, ts, src_ip, src_port, dest_ip, dest_port, proto, sid, priority, raw_json) "
+                 "VALUES (1, '2025-10-09T10:20:00.000000+0000', '10.0.0.1', 1, '10.0.0.2', 2, 'UDP', 9001, 1, '{}')")
+    conn.commit()
+    assert _matching(client, "/alerts?proto=UDP") == 1
+    assert _matching(client, "/alerts?proto=TCP") == 4
+    page = client.get("/alerts?proto=TCP&proto=UDP&sort=time&dir=desc").text
+    assert 'aria-label="Remove filter Proto: TCP"' in page
+    assert 'aria-label="Remove filter Proto: UDP"' in page
+    tcp_href = re.search(r'<a class="badge info" href="([^"]+)" aria-label="Remove filter Proto: TCP"', page).group(1)
+    assert "sort=time" in tcp_href and "proto=UDP" in tcp_href and "proto=TCP" not in tcp_href
+
+
+def test_alert_filters_resist_sql_injection(analysed):
+    client, conn = analysed
+    total = conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+    url = "/alerts?src_ip=1%27%20OR%20%271%27%3D%271"                  # src_ip=1' OR '1'='1
+    page = client.get(url).text
+    assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == total
+    assert _matching(client, url) == total                              # dropped as invalid, all rows returned
+    assert "Ignored" in page
+
+
+@pytest.mark.parametrize("query", ["sid=%C2%B2", f"sid={'9' * 30}", "port=%C2%B2", f"port={'9' * 5000}",
+                                   "ts_to=9999-12-31T23:59"])
+def test_alert_odd_filter_values_are_ignored_not_a_crash(analysed, query):
+    client, _ = analysed
+    response = client.get(f"/alerts?{query}")
+    assert response.status_code == 200 and "Ignored" in response.text
+    assert _matching(client, f"/alerts?{query}") == 4
+
+
+def test_alert_time_filter_pads_short_dates(analysed):
+    client, _ = analysed
+    assert _matching(client, "/alerts?ts_from=2025-10-9T10:15") == _matching(client, "/alerts?ts_from=2025-10-09T10:15")
+
+
 def test_alerts_per_minutes_and_top_devices(analysed):
     client, conn = analysed
     rows = client.get("/api/analyses/1/alert-series?minutes=60").json()

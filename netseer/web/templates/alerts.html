@@ -56,18 +56,25 @@
 </div>
 
 <h2>Alert table <span class="muted" style="font-weight:normal">({{ total }} matching)</span></h2>
-<details class="filter-frame" {{ 'open' if n_filters }}>
+{% if chips %}
+<p class="row-actions">{% for c in chips %}<a class="badge info" href="/alerts?{{ c.qs }}" aria-label="Remove filter {{ c.label }}" title="Remove filter">{{ c.label }} ×</a>{% endfor %}</p>
+{% endif %}
+{% if filter_notes %}<p class="muted" role="status">Ignored: {{ filter_notes | join(", ") }}</p>{% endif %}
+<details class="filter-frame" {{ 'open' if n_filters or filter_notes }}>
 <summary>Filters{% if n_filters %} <span class="badge info">{{ n_filters }} active</span>{% endif %}</summary>
 <form method="get" action="/alerts">
   <div class="filters">
     <div><label for="f-q">Search</label>{{ search_input("f-q", "q", params.q, options.signature, "signature or class") }}</div>
-    <div><label for="f-src">Source IP</label>{{ search_input("f-src", "src_ip", params.src_ip, options.src_ip, "", 15) }}</div>
-    <div><label for="f-dst">Destination IP</label>{{ search_input("f-dst", "dest_ip", params.dest_ip, options.dest_ip, "", 15) }}</div>
+    <div><label for="f-src">Source IP</label>{{ search_input("f-src", "src_ip", params.src_ip, options.src_ip, "IP, prefix or CIDR") }}</div>
+    <div><label for="f-dst">Destination IP</label>{{ search_input("f-dst", "dest_ip", params.dest_ip, options.dest_ip, "IP, prefix or CIDR") }}</div>
     <div><label for="f-sid">SID</label>{{ search_input("f-sid", "sid", params.sid, options.sid, "", 9) }}</div>
+    <div><label for="f-port">Port</label><input id="f-port" type="number" name="port" min="0" max="65535" value="{{ params.port or '' }}"></div>
+    <div><label for="f-from">From (UTC)</label><input id="f-from" type="datetime-local" name="ts_from" value="{{ params.ts_from or '' }}"></div>
+    <div><label for="f-to">To (UTC)</label><input id="f-to" type="datetime-local" name="ts_to" value="{{ params.ts_to or '' }}"></div>
   </div>
   {% if params.sort %}<input type="hidden" name="sort" value="{{ params.sort }}"><input type="hidden" name="dir" value="{{ params.dir }}">{% endif %}
   <div class="tick-groups">
-  {% for key, title in [("priority", "Severity"), ("direction", "Direction"), ("classtype", "Class")] %}
+  {% for key, title in [("priority", "Severity"), ("direction", "Direction"), ("proto", "Proto"), ("classtype", "Class")] %}
     <fieldset><legend>{{ title }}</legend>
       {% for v in ticks[key] %}<label><input type="checkbox" name="{{ key }}" value="{{ v }}" {{ 'checked' if v | string in params.get(key, []) }}> {% if key == "priority" %}{{ v | int | severity }}{% else %}{{ v }}{% endif %}</label>{% endfor %}
     </fieldset>

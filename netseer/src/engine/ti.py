@@ -75,7 +75,7 @@ def l5(results: dict[str, dict[str, dict]]) -> tuple[float, str, str] | None:
 
 
 def enrich(conn: sqlite3.Connection, analysis_id: int, sleep=time.sleep) -> int:
-    """Look up the external IPs of the analysis's top incidents that are not cached (or are stale); returns lookups."""
+    """Look up the external IPs of the analysis's top incidents that are not cached; returns lookups."""
     keys = {s: get_key(conn, s) for s in SOURCES}
     if not any(keys.values()):
         return 0
@@ -86,14 +86,20 @@ def enrich(conn: sqlite3.Connection, analysis_id: int, sleep=time.sleep) -> int:
             if ip not in ips and _public(ip) and not conn.execute(
                     "SELECT 1 FROM devices WHERE analysis_id = ? AND ip = ?", (analysis_id, ip)).fetchone():
                 ips.append(ip)
+    # Only IPs that still need a lookup count toward the cap, so a rerun reaches the next uncached IP.
+    ips = [ip for ip in ips if any(keys[s] and not conn.execute(
+        "SELECT 1 FROM ti_cache WHERE indicator = ?", (f"{s}:{ip}",)).fetchone() for s in SOURCES)]
     n = 0
+    vt_called = False
     for ip in ips[:MAX_IPS]:
         for source, key in keys.items():
-            cached_ = conn.execute("SELECT 1 FROM ti_cache WHERE indicator = ?", (f"{source}:{ip}",)).fetchone()
-            if not key or cached_:            # results are kept until Detonate: each IP is looked up once
-                continue
-            if source == "virustotal" and n:
-                sleep(VT_GAP_S)
+            if not key or conn.execute("SELECT 1 FROM ti_cache WHERE indicator = ?",
+                                       (f"{source}:{ip}",)).fetchone():
+                continue            # results are kept until Detonate: each IP is looked up once
+            if source == "virustotal":
+                if vt_called:
+                    sleep(VT_GAP_S)
+                vt_called = True
             try:
                 result = fetch(source, ip, key)
             except (httpx.HTTPError, KeyError, ValueError) as exc:

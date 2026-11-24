@@ -134,6 +134,7 @@ One row per brief §10 step or change request, with the evidence that its Check 
 | dump.md ideas (2026-11-24): auto LAN subnet for live, risk model A5-1.2 (Option B, 3 h demo half-life) | Done | ✅ `pytest netseer/tests`: 242 passed; A5.6 by hand and in tests: P(N) 0.381, health 62. Real DB copy re-scored: analyses 4/5/6/7 health 53/25/83/53 (before 61/10/80/43); `risk_eval` on analysis 5 ran | Rank-weighted sum not adopted: `damped_union` kept (CONCEPTS A5.4). The real DB keeps old scores until `python -m netseer.cli acp all` |
 | Owner request (2026-11-23): revert UI to `1a2add9`, disable unslop | Done | ✅ `netseer/web` matches `1a2add9` except one severity label line; browser check on DB copy: Home and Alerts charts draw, Settings tabs open, no page errors; `pytest netseer/tests` 234 passed |
 | Live Reprocess + development alert filter (2026-11-24) | Done | ✅ on a copy of live session 7: Reprocess rebuilt 122,350 events, 23,540 alerts, 21 incidents and 270 devices identically in 20.7 s with eve.json unchanged; filter on: 20,551 alerts ignored, 2,989 kept, packets unchanged; off: 23,540 restored. 251 tests; browser check of tick, badge and Reprocess on a DB copy |
+| Alerts filters + TI enrichment fixes (2026-11-24) | Done | ✅ 268 tests; browser check on a copy of live session 7: 23,540 alerts, TCP 813, TCP + High 0, chip removal and invalid SID note work; live VirusTotal lookup of 8.8.8.8 returned 92 engines, 1 malicious. Enrichment of a real session's IPs not run (mocked in tests) | Live stop and Reprocess now enrich; cap counts uncached IPs; VT waits after failures |
 
 ## Decisions to confirm at the demo
 Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belong in CONCEPTS.md; remove them here once confirmed.
@@ -189,7 +190,7 @@ Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belon
 - **R2/R3 need the same SID.** Before, a sweep/fan-in counted hosts across any signatures, so unrelated alerts between busy hosts chained into blobs (43% of "big"'s alerts in two incidents). "big": 45 → 204 incidents, largest incident 25% → 17% of alerts, health 41 → 44.
 - **R4 needs a forward kill-chain step** (ATT&CK tactic order). Reverse pairs such as "Lateral Movement → Initial Access" no longer fire it.
 - **Correlation window = longest quiet gap** inside an incident (chaining kept, now written down in CONCEPTS A4/A0).
-- **L5 is raise-only** (a clean reputation no longer lowers the top incidents); VirusTotal = min(1, malicious engines/5); VT with no engine results is unknown, not safe. Cached VT results keep the old ratio until refetched (24 h).
+- **L5 is raise-only** (a clean reputation no longer lowers the top incidents); VirusTotal = min(1, malicious engines/5); VT with no engine results is unknown, not safe. Cached TI results are kept until Detonate and are not refetched by age, so older VT rows keep their old ratio.
 - **Device colour = worst incident band** on Devices, Home and the map; the % is still P(d). Home "devices at risk" = worst band Medium or above.
 - **Still open:** the largest "big" incident (17%) is one Suricata decoder event (STREAM ESTABLISHED packet out of window) between 10 → 10 hosts. With one SID it is a genuine R3 under the rules; leaving engine events (SIDs 2200000–2299999) out of R2/R3 would remove it.
 - **Munir check:** A5.1 now says the independence assumption is NetSeer's own (the thesis never states it and its department figures disagree, Eq. 3.3 vs 3.18). The PDF sits in `docs/`, gitignored.
@@ -200,7 +201,7 @@ Moved from `docs/progress.md` (2026-11-18). Rules that the owner confirmed belon
 - **Fixes:** Suricata runs with `EXTERNAL_NET=any`, and NetSeer adds its own port-scan alert from flow events (≥ 50 probed ports per host, SID 9000001). Re-analysed "realnetwork": 7 NETSEER scan alerts + ~30 ET SCAN alerts → one Medium incident "192.168.100.139 → 192.168.100.1: 14 different signatures" (R1, R2); the Attack → Victim panel lists all scanned hosts.
 - **Stop** (admin) kills Suricata within about a second, deletes the run's results and eve.json, keeps the capture; status `stopped`; Re-analyse works. A row left running by a restart is cleared at once.
 - **AI progress %** is an estimate (mean of the last 10 timed explanations, 90 s before any), held at 95% until done.
-- **Alert filters:** collapsible frame; tick boxes for priority, severity, direction, class (values in a group are OR-ed, groups AND-ed).
+- **Alert filters:** collapsible frame; search, IP/prefix/CIDR, SID, port, UTC time range; tick boxes for severity, direction, proto, class (values in a group are OR-ed, groups AND-ed); removable chips.
 - **Auto-logout toggle** (Settings > Accounts): global; off = no countdown, sessions still end 12 h after sign-in.
 
 ### C3 change request 4

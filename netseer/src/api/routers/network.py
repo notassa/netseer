@@ -271,8 +271,8 @@ def open_live(request: Request, mirror: str = Form(...), lan: str = Form(...), a
 
 
 @router.post("/network/live/{analysis_id}/{action}", dependencies=[Depends(verify_csrf)])
-def control_live(request: Request, analysis_id: int, action: str, admin=Depends(require_admin),
-                 conn: sqlite3.Connection = Depends(get_db)):
+def control_live(request: Request, analysis_id: int, action: str, background: BackgroundTasks,
+                 admin=Depends(require_admin), conn: sqlite3.Connection = Depends(get_db)):
     """Start the capture of a ready session, or stop a session."""
     if action not in ("start", "stop"):
         raise HTTPException(status_code=404)
@@ -281,6 +281,8 @@ def control_live(request: Request, analysis_id: int, action: str, admin=Depends(
         (live.confirm if action == "start" else live.stop)(conn, request.app.state.data_dir, analysis_id)
     except live.LiveError as exc:
         return redirect("/network", "error", str(exc))
+    if action == "stop":
+        background.add_task(live.enrich_stopped, request.app.state.db_path, analysis_id)
     return redirect("/network", "ok", "Capture started." if action == "start" else "Live session stopped.")
 
 

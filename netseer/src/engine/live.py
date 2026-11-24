@@ -18,8 +18,8 @@ from pathlib import Path
 
 from netseer.src.config import adopt_lan, analysis_lan, app_config, get_setting, setting_defaults
 from netseer.src.database import db
-from netseer.src.engine import oui
-from netseer.src.engine.acp import run_acp
+from netseer.src.engine import oui, ti
+from netseer.src.engine.acp import rescore, run_acp
 from netseer.src.engine.ingest import PROGRESS, _clear_results, _progress_lock, _run_lock, classification_file, eve_dir, set_progress
 from netseer.src.engine.logger import EveLogger, canonical_ip, load_classtypes, parse_networks, process_eve_file
 from netseer.src.engine.networks import run_discovery
@@ -329,10 +329,32 @@ def run_reprocess(db_path: Path, data_dir: Path, analysis_id: int) -> None:
                      f"{log.n_ignored} own alerts ignored, "
                      f"{acp['groups']} alert groups, {acp['incidents']} possible incidents")
         oui.online_vendors(conn, analysis_id)
+        enrich_session(conn, analysis_id)
     except Exception as exc:  # noqa: BLE001 - any failure is recorded on the analysis and shown in the UI
         conn.execute("UPDATE analyses SET status = 'failed', error = ? WHERE id = ?", (str(exc)[:500], analysis_id))
         db.audit(conn, None, "analysis_failed", f"analysis {analysis_id}: {exc}")
     finally:
         with _progress_lock:
             PROGRESS.pop(analysis_id, None)
+        conn.close()
+
+
+def enrich_session(conn, analysis_id: int) -> None:
+    """Enrich a session's external IPs with TI, then re-score if any new lookups landed and it is still stopped."""
+    try:
+        if ti.enrich(conn, analysis_id) > 0:       # no lock held: lookups can take minutes
+            with _run_lock:
+                row = conn.execute("SELECT status FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+                if row and row["status"] == "stopped":
+                    rescore(conn, analysis_id)
+    except Exception as exc:  # noqa: BLE001 - TI is optional; never fail a session
+        db.audit(conn, None, "ti_failed", f"analysis {analysis_id}: {exc}"[:500])
+
+
+def enrich_stopped(db_path: Path, analysis_id: int) -> None:
+    """Background job: enrich a just-stopped session's external IPs with TI."""
+    conn = db.connect(db_path)
+    try:
+        enrich_session(conn, analysis_id)
+    finally:
         conn.close()

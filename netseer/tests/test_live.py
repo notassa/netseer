@@ -308,3 +308,52 @@ def test_reprocess_applies_the_filter(conn, tmp_path, monkeypatch):  # noqa: F81
     rows = conn.execute("SELECT src_ip FROM alerts WHERE analysis_id = 2").fetchall()
     assert [r["src_ip"] for r in rows] == ["203.0.113.9"]
     assert eve.read_bytes() == before
+
+
+def test_enrich_session_rescores_only_when_stopped_and_positive(conn, monkeypatch):  # noqa: F811
+    rescored = []
+    monkeypatch.setattr(live.ti, "enrich", lambda conn, aid: 0)
+    monkeypatch.setattr(live, "rescore", lambda conn, aid: rescored.append(aid))
+    live.enrich_session(conn, 1)
+    assert rescored == []                                   # 0 lookups: no rescore
+    monkeypatch.setattr(live.ti, "enrich", lambda conn, aid: 2)
+    live.enrich_session(conn, 1)                            # status is 'done', not 'stopped'
+    assert rescored == []
+    conn.execute("UPDATE analyses SET status = 'stopped' WHERE id = 1")
+    live.enrich_session(conn, 1)
+    assert rescored == [1]
+
+
+def test_enrich_session_exception_is_audited_and_swallowed(conn, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(live.ti, "enrich", lambda conn, aid: (_ for _ in ()).throw(RuntimeError("ti boom")))
+    live.enrich_session(conn, 1)                            # must not raise
+    row = conn.execute("SELECT detail FROM audit_log WHERE action = 'ti_failed'").fetchone()
+    assert row and "ti boom" in row[0] and "analysis 1" in row[0]
+
+
+def test_reprocess_calls_enrich_session(conn, tmp_path, monkeypatch):  # noqa: F811
+    sid = conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                       "VALUES (2, 'Live', 'live', 'stopped', 'x')").lastrowid
+    eve = ingest.eve_dir(tmp_path, sid) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    eve.write_text(eve_line(1))
+    called = []
+    monkeypatch.setattr(live, "enrich_session", lambda conn, aid: called.append(aid))
+    live.begin_reprocess(conn, tmp_path, sid)
+    live.run_reprocess(tmp_path / "t.db", tmp_path, sid)
+    assert called == [sid]
+
+
+def test_stop_route_schedules_enrichment(admin_client, monkeypatch):  # noqa: F811
+    fake = [{"name": "eno1", "operstate": "up", "carrier": True, "mac": "x", "rx_packets": 1, "has_ipv4": True},
+            {"name": "mirror0", "operstate": "down", "carrier": False, "mac": "y", "rx_packets": 0, "has_ipv4": False}]
+    monkeypatch.setattr(live, "interfaces", lambda sys_net=None: fake)
+    assert admin_client.post("/network/live", data={"csrf_token": csrf(admin_client, "/network"), "mirror": "mirror0",
+                                                    "lan": "eno1"}).status_code == 303
+    conn = db.connect(admin_client.app.state.db_path)
+    sid = conn.execute("SELECT id FROM analyses WHERE mode = 'live'").fetchone()[0]
+    scheduled = []
+    monkeypatch.setattr(live, "enrich_stopped", lambda db_path, aid: scheduled.append((db_path, aid)))
+    assert admin_client.post(f"/network/live/{sid}/stop",
+                             data={"csrf_token": csrf(admin_client, "/network")}).status_code == 303
+    assert scheduled == [(admin_client.app.state.db_path, sid)]

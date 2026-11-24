@@ -13,6 +13,7 @@ from netseer.src.engine import ti
 from netseer.src.engine.acp import rescore, run_acp
 from netseer.src.engine.scorer import network_health
 from netseer.tests.test_auth import admin_client, csrf  # noqa: F401 - fixture
+from netseer.tests.test_contextor import conn  # noqa: F401 - fixture
 from netseer.tests.test_incidents import scored  # noqa: F401 - fixture
 
 EXT = "198.51.100.66"          # the A5.6 C2 server (a documentation address, so _public is patched)
@@ -128,3 +129,35 @@ def test_ti_results_are_kept_until_detonate(scored, monkeypatch):  # noqa: F811
     ti.enrich(conn, 1)
     conn.execute("UPDATE ti_cache SET fetched_at = '2000-01-01T00:00:00+00:00'")       # very old
     assert ti.enrich(conn, 1) == 0 and calls == [EXT]
+
+
+def test_cached_ips_do_not_use_the_20_ip_cap(conn, monkeypatch):  # noqa: F811
+    keystore.set_key(conn, "abuseipdb", "k")
+    monkeypatch.setattr(ti, "_public", lambda ip: True)
+    ips = [f"203.0.113.{i}" for i in range(21)]
+    conn.execute("INSERT INTO incidents(analysis_id, title, rule, src_ips_json, dest_ips_json, n_alerts, score) "
+                 "VALUES (1, 't', 'r', '[]', ?, 1, 0)", (json.dumps(ips),))
+    for ip in ips[:20]:                                    # the first 20 are already cached
+        conn.execute("INSERT INTO ti_cache(indicator, source, result_json, fetched_at) "
+                     "VALUES (?, 'abuseipdb', ?, 'x')", (f"abuseipdb:{ip}", json.dumps({"score": 0.0})))
+    calls = []
+    monkeypatch.setattr(ti, "fetch", lambda source, ip, key: calls.append(ip) or {"score": 0.5})
+    assert ti.enrich(conn, 1) == 1 and calls == [ips[20]]  # reaches the 21st IP
+
+
+def test_virustotal_rate_limit_waits_between_calls_even_on_failure(conn, monkeypatch):  # noqa: F811
+    keystore.set_key(conn, "virustotal", "k")
+    monkeypatch.setattr(ti, "_public", lambda ip: True)
+    ips = ["203.0.113.1", "203.0.113.2"]
+    conn.execute("INSERT INTO incidents(analysis_id, title, rule, src_ips_json, dest_ips_json, n_alerts, score) "
+                 "VALUES (1, 't', 'r', '[]', ?, 1, 0)", (json.dumps(ips),))
+    calls, sleeps = [], []
+    def fetch(source, ip, key):
+        calls.append((source, ip))
+        if ip == ips[0]:
+            raise httpx.HTTPError("boom")
+        return {"score": 0.5}
+    monkeypatch.setattr(ti, "fetch", fetch)
+    assert ti.enrich(conn, 1, sleep=sleeps.append) == 1
+    assert calls == [("virustotal", ips[0]), ("virustotal", ips[1])]
+    assert sleeps == [ti.VT_GAP_S]                          # none before the first VT call, one before the second

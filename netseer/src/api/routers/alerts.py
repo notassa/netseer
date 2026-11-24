@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import re
 import sqlite3
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
@@ -10,38 +12,148 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from netseer.src.api.deps import (distinct_values, get_db, layout_context, order_by, page_qs, paging, render,
-                                  require_user)
+                                  require_user, severity_label)
 from netseer.src.engine.alert_mix import alert_mix
 from netseer.src.engine.constants import DEVICE_TYPE_LABEL
 
 router = APIRouter(dependencies=[Depends(require_user)])
 
 DIRECTIONS = ("ext->int", "int->ext", "int->int", "ext->ext")
-TICKS = {"priority": ("1", "2", "3", "4"), "direction": DIRECTIONS, "classtype": None}
-FILTER_KEYS = ("q", "src_ip", "dest_ip", "sid", *TICKS)
+TICKS = {"priority": ("1", "2", "3", "4"), "direction": DIRECTIONS, "classtype": None, "proto": None}
+FILTER_KEYS = ("q", "src_ip", "dest_ip", "sid", "port", "ts_from", "ts_to", *TICKS)
+FILTER_LABELS = {"q": "Search", "src_ip": "Source", "dest_ip": "Destination", "sid": "SID", "port": "Port",
+                 "ts_from": "From", "ts_to": "To", "priority": "Severity", "direction": "Direction",
+                 "proto": "Proto", "classtype": "Class"}
+IP_PREFIX_RE = re.compile(r"^[0-9a-fA-F:.]+$")
+TS_FMT = "%Y-%m-%dT%H:%M"
 ALERT_SORT = {"id": "id", "time": "ts", "src": "src_ip", "dest": "dest_ip", "proto": "proto", "signature": "signature",
               "class": "classtype", "severity": "priority", "direction": "direction"}
 
 
-def _filters(params: dict[str, str | list[str]]) -> tuple[str, list]:
+def _clean_filters(params: dict) -> list[str]:
+    """Strip text values, drop invalid ones from `params`, and return a note per invalid typed field."""
+    notes: list[str] = []
+    for field in ("q", "src_ip", "dest_ip", "sid", "port", "ts_from", "ts_to"):
+        if isinstance(params.get(field), str):
+            params[field] = params[field].strip()
+    for field in ("src_ip", "dest_ip"):
+        v = params.get(field)
+        if not v:
+            continue
+        if "/" in v:
+            try:
+                ipaddress.ip_network(v, strict=False)
+            except ValueError:
+                notes.append(f'{FILTER_LABELS[field]} "{v}"')
+                params.pop(field)
+        elif not IP_PREFIX_RE.fullmatch(v):
+            notes.append(f'{FILTER_LABELS[field]} "{v}"')
+            params.pop(field)
+    v = params.get("sid")
+    if v and not (v.isascii() and v.isdigit() and len(v) <= 18):      # fits SQLite's 64-bit integer
+        notes.append(f'{FILTER_LABELS["sid"]} "{v}"')
+        params.pop("sid")
+    v = params.get("port")
+    if v and not (v.isascii() and v.isdigit() and len(v) <= 5 and int(v) <= 65535):
+        notes.append(f'{FILTER_LABELS["port"]} "{v}"')
+        params.pop("port")
+    bounds: dict[str, datetime] = {}
+    for field in ("ts_from", "ts_to"):
+        v = params.get(field)
+        if not v:
+            continue
+        try:
+            parsed = datetime.strptime(v, TS_FMT)
+            parsed + timedelta(minutes=1)                             # ts_to's exclusive end must exist
+        except (ValueError, OverflowError):
+            notes.append(f'{FILTER_LABELS[field]} "{v}"')
+            params.pop(field)
+        else:
+            bounds[field] = parsed
+            params[field] = parsed.isoformat(timespec="minutes")      # zero-padded: ts is compared as text
+    from_, to_ = bounds.get("ts_from"), bounds.get("ts_to")
+    if from_ and to_ and from_ > to_:
+        params.pop("ts_from", None)
+        params.pop("ts_to", None)
+        notes.append("From is after To")
+    for col, allowed in TICKS.items():               # tick boxes: any of the ticked values
+        values = [x for x in params.get(col, []) if allowed is None or x in allowed]
+        if values:
+            params[col] = values
+        else:
+            params.pop(col, None)
+    return notes
+
+
+def _filters(params: dict[str, str | list[str]], conn: sqlite3.Connection, analysis_id: int) -> tuple[str, list]:
     """WHERE clause fragments for the table filters (all parameterised)."""
     clauses, args = [], []
     if params.get("q"):
         clauses.append("(signature LIKE ? OR category LIKE ? OR classtype LIKE ?)")
         args += [f"%{params['q']}%"] * 3
     for field in ("src_ip", "dest_ip"):
-        if params.get(field):
-            clauses.append(f"{field} = ?")
-            args.append(params[field].strip())
-    if params.get("sid", "").isdigit():
+        v = params.get(field)
+        if not v:
+            continue
+        if "/" in v:                                 # CIDR: only addresses already present and inside the network
+            net = ipaddress.ip_network(v, strict=False)
+            inside = []
+            for (ip,) in conn.execute(
+                    f"SELECT DISTINCT {field} FROM alerts WHERE analysis_id = ? AND {field} IS NOT NULL",
+                    (analysis_id,)):
+                try:
+                    if ipaddress.ip_address(ip) in net:
+                        inside.append(ip)
+                except ValueError:
+                    continue                         # skip unparsable stored values
+            clauses.append(f"{field} IN (SELECT value FROM json_each(?))")
+            args.append(json.dumps(inside))
+        else:
+            try:
+                ipaddress.ip_address(v)              # a full IP: exact match
+            except ValueError:
+                clauses.append(f"{field} LIKE ?")     # otherwise a partial prefix
+                args.append(v + "%")
+            else:
+                clauses.append(f"{field} = ?")
+                args.append(v)
+    if params.get("sid"):
         clauses.append("sid = ?")
         args.append(int(params["sid"]))
+    if params.get("port"):
+        clauses.append("(src_port = ? OR dest_port = ?)")
+        args += [int(params["port"]), int(params["port"])]
+    if params.get("ts_from"):
+        clauses.append("ts >= ?")
+        args.append(params["ts_from"] + ":00")
+    if params.get("ts_to"):
+        clauses.append("ts < ?")
+        args.append((datetime.strptime(params["ts_to"], TS_FMT) + timedelta(minutes=1)).isoformat(timespec="seconds"))
     for col, allowed in TICKS.items():               # tick boxes: any of the ticked values
         values = [v for v in params.get(col, []) if allowed is None or v in allowed]
         if values:
             clauses.append(f"{col} IN ({','.join('?' * len(values))})")
             args += [int(v) if col == "priority" else v for v in values]
     return "".join(f" AND {c}" for c in clauses), args
+
+
+def _filter_chips(params: dict) -> list[dict]:
+    """One chip per active filter value, each linking to the query string without that value."""
+    chips: list[dict] = []
+    for key in ("q", "src_ip", "dest_ip", "sid", "port", "ts_from", "ts_to", *TICKS):
+        value = params.get(key)
+        if key in TICKS:
+            for v in value or []:
+                label = f"Severity: {severity_label(int(v))}" if key == "priority" else f"{FILTER_LABELS[key]}: {v}"
+                rest = [x for x in value if x != v]
+                others = {k: val for k, val in params.items() if k != key}
+                if rest:
+                    others[key] = rest
+                chips.append({"label": label, "qs": page_qs(others)})
+        elif value:
+            chips.append({"label": f"{FILTER_LABELS[key]}: {value}",
+                          "qs": page_qs({k: val for k, val in params.items() if k != key})})
+    return chips
 
 
 @router.get("/alerts")
@@ -53,7 +165,8 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         return render(request, "alerts.html", ctx)
     params: dict = {k: v for k, v in request.query_params.items() if v and k not in TICKS}
     params |= {k: vs for k in TICKS if (vs := [v for v in request.query_params.getlist(k) if v])}
-    where, args = _filters(params)
+    filter_notes = _clean_filters(params)
+    where, args = _filters(params, conn, selected["id"])
     total = conn.execute(f"SELECT COUNT(*) FROM alerts WHERE analysis_id = ?{where}", (selected["id"], *args)).fetchone()[0]
     pg = paging(params, total)
     rows = conn.execute(
@@ -70,9 +183,13 @@ def alerts_page(request: Request, conn: sqlite3.Connection = Depends(get_db)):
         "pg": pg,
         "params": params,
         "qs": page_qs(params),
+        "filter_notes": filter_notes,
+        "chips": _filter_chips(params),
         "ticks": {"priority": TICKS["priority"], "direction": DIRECTIONS,
                   "classtype": distinct_values(conn, "SELECT classtype AS v FROM alerts WHERE analysis_id = ?",
-                                               (selected["id"],), 50)},
+                                               (selected["id"],)),
+                  "proto": distinct_values(conn, "SELECT proto AS v FROM alerts WHERE analysis_id = ?",
+                                           (selected["id"],))},
         "n_filters": sum(k in params for k in FILTER_KEYS),
         "bin_minutes": minutes,
         "packets": packet_series(conn, selected["id"], minutes),
