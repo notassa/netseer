@@ -9,6 +9,12 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-24] Information: NetSeer details default and first, % on Memory and Disk → new; done → CONCEPTS A10, brief §9 → f179dc6
+- [2026-11-24] Chart axis settings in a gear pop-up, x-axis 1–1000 s/min/h, y-axis fixed → conflicted with A10 (5–3600 s, wheel); done, wheel dropped; traffic rounds up to 5 s and Packets/Alerts to whole minutes (storage steps), max 1000 h → CONCEPTS A10, brief §9 → f179dc6
+- [2026-11-24] Cloud LLM: add DeepSeek and Claude → duplicate of the LLM Provider idea, done with it → f179dc6
+- [2026-11-24] Settings > AI: LLM Provider dropdown (OpenAI, Claude, DeepSeek), model dropdown per provider, one private key each → changed A15; done, keys Fernet-encrypted and write-only, masked in errors, old shared key dropped (re-enter); model lists live from /models with the key, else built-in (Claude, DeepSeek; OpenAI live only) → CONCEPTS A15, brief §5/§7, RAD-PLAN, WRITEUP §5.3 → f179dc6
+- [2026-11-24] DeepSeek 400 on AI explanation → bug; real call showed DeepSeek rejects json_schema ("This response_format type is unavailable now"), json_object works; fixed; full explanation with the new code not run yet (key gone) → brief §7, RAD-PLAN → f179dc6
+- [2026-11-24] Devices: rows clickable with a pop-up → new; done (details, type, risk, incidents loaded on open, alert/incident links) → CONCEPTS A10, brief §9 → f179dc6
 - [2026-11-24] `GET /health` 404s in the app log → not a NetSeer bug: opencode 2.3.2's `serve --service` probes for a local vLLM at 127.0.0.1:8000 every ~25 s; `disabled_providers` alone did not stop it; fixed outside the repo with `providers.vllm.settings.baseURL = "off"` in ~/.config/opencode/opencode.json; 0 probes in 75 s after the restart, DeepSeek models still listed → no docs → no code commit
 - [2026-11-24] Home Traffic Volume: Total default, button left, x-axis follows bin → new; done, HH:MM for whole-minute bins → CONCEPTS A10, brief §9 → a40e319
 - [2026-11-24] SSDP false positive 192.168.100.24 → 192.168.100.1:1900 → rule is `any → $HOME_NET 1900`, not caused by inside_rules; sender process not identified; owner chose (a): no change, use the "Ignore NetSeer and Tailscale alerts" dev setting → no docs → a40e319
