@@ -9,6 +9,7 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-24] `GET /health` 404s in the app log → not a NetSeer bug: opencode 2.3.2's `serve --service` probes for a local vLLM at 127.0.0.1:8000 every ~25 s; `disabled_providers` alone did not stop it; fixed outside the repo with `providers.vllm.settings.baseURL = "off"` in ~/.config/opencode/opencode.json; 0 probes in 75 s after the restart, DeepSeek models still listed → no docs → no code commit
 - [2026-11-24] Home Traffic Volume: Total default, button left, x-axis follows bin → new; done, HH:MM for whole-minute bins → CONCEPTS A10, brief §9 → a40e319
 - [2026-11-24] SSDP false positive 192.168.100.24 → 192.168.100.1:1900 → rule is `any → $HOME_NET 1900`, not caused by inside_rules; sender process not identified; owner chose (a): no change, use the "Ignore NetSeer and Tailscale alerts" dev setting → no docs → a40e319
 - [2026-11-24] Traffic Volume on Network page → new; done, full width below Traffic Source + Analyses, one shared chart (static/js/traffic.js) → CONCEPTS A10, brief §9 → a40e319
