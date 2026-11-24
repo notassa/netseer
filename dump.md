@@ -9,6 +9,11 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-24] Home Traffic Volume: Total default, button left, x-axis follows bin → new; done, HH:MM for whole-minute bins → CONCEPTS A10, brief §9 → a40e319
+- [2026-11-24] SSDP false positive 192.168.100.24 → 192.168.100.1:1900 → rule is `any → $HOME_NET 1900`, not caused by inside_rules; sender process not identified; owner chose (a): no change, use the "Ignore NetSeer and Tailscale alerts" dev setting → no docs → a40e319
+- [2026-11-24] Traffic Volume on Network page → new; done, full width below Traffic Source + Analyses, one shared chart (static/js/traffic.js) → CONCEPTS A10, brief §9 → a40e319
+- [2026-11-24] Network map: Internet click toggles outside nodes, hidden by default, links to Internet, curved links → conflicted with A17; done → CONCEPTS A17, brief §9 → a40e319
+- [2026-11-24] Gateway from ARP "who has" and IPv6 router advertisement → /24 grouping already done; new: ARP (≥3 askers, .1/.254 first, probable) and RA (MAC → IPv4 device, strong), Suricata ARP log on; RA seen in real eve (fe80::1 = 192.168.100.1's MAC), 1-min real ARP capture had only the router asking → CONCEPTS A17 → a40e319
 - [2026-11-24] Test VirusTotal, ensure enrichment works → key and API work (8.8.8.8: 92 engines, 1 malicious); fixed live enrichment, 20-IP cap, rate limit; real session lookup not run → CONCEPTS A9, RAD-PLAN → 0d05065
 - [2026-11-24] Alerts table filter rework → new; done with port, UTC time, proto, IP prefix/CIDR, removable chips → CONCEPTS A10, brief §9, RAD-PLAN → 0d05065
 - [2026-11-24] Live stores eve.json + re-analyse → storing already done; Reprocess added, no new Suricata detection, device types kept → CONCEPTS A10/A13, brief §6c/§9 → 5cba687
