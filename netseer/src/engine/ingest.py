@@ -441,12 +441,16 @@ def _suricata_log_tail(data_dir: Path, analysis_id: int) -> str:
 
 
 def mark_interrupted(conn: sqlite3.Connection) -> None:
-    """At start-up, fail offline jobs that were cut off by a restart."""
+    """At start-up, fail offline jobs that were cut off by a restart, and live reprocesses interrupted too."""
     rows = conn.execute(f"SELECT id FROM analyses WHERE mode = 'offline' AND status IN "
                         f"({','.join('?' * len(ACTIVE_STATUSES))})", ACTIVE_STATUSES).fetchall()
     for row in rows:
         conn.execute("UPDATE analyses SET status = 'failed', error = 'Interrupted by a NetSeer restart; upload again.' "
                      "WHERE id = ?", (row["id"],))
+        db.audit(conn, None, "analysis_interrupted", f"analysis {row['id']}: NetSeer restarted during the job")
+    for row in conn.execute("SELECT id FROM analyses WHERE mode = 'live' AND status = 'processing'").fetchall():
+        conn.execute("UPDATE analyses SET status = 'failed', "
+                     "error = 'Interrupted by a NetSeer restart; press Reprocess again.' WHERE id = ?", (row["id"],))
         db.audit(conn, None, "analysis_interrupted", f"analysis {row['id']}: NetSeer restarted during the job")
 
 
@@ -458,7 +462,7 @@ def delete_analysis(conn: sqlite3.Connection, data_dir: Path, analysis_id: int, 
     if row["status"] in ACTIVE_STATUSES and not force:
         raise IngestError("This analysis is still running. Wait for it to finish before deleting it.")
     conn.execute("DELETE FROM analyses WHERE id = ?", (analysis_id,))
-    conn.execute("DELETE FROM settings WHERE key = ?", (f"lan_cidrs:{analysis_id}",))
+    conn.execute("DELETE FROM settings WHERE key IN (?, ?)", (f"lan_cidrs:{analysis_id}", f"reprocess_devices:{analysis_id}"))
     shutil.rmtree(pcap_dir(data_dir, analysis_id), ignore_errors=True)
     shutil.rmtree(eve_dir(data_dir, analysis_id), ignore_errors=True)
 

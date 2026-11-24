@@ -57,7 +57,7 @@ def settings_page(request: Request, user=Depends(require_user), conn: sqlite3.Co
         "accounts": accounts if user["role"] == "admin" else [],
         "has_user": any(a["role"] == "user" for a in accounts),
         "config_fields": CONFIG_FIELDS,
-        "config": {key: get_setting(conn, key) for key in (*CONFIG_FIELDS, "lan_cidrs", "inside_rules", "mac_lookup_online", "data_unit")},
+        "config": {key: get_setting(conn, key) for key in (*CONFIG_FIELDS, "lan_cidrs", "inside_rules", "mac_lookup_online", "data_unit", "ignore_own_traffic")},
         "lan_detected": [{"name": n["name"], "subnet": s} for n in live.interfaces() if n["has_ipv4"]
                          and (s := live.nic_subnet(n["name"]))],
         "data_units": DATA_UNITS,
@@ -87,6 +87,7 @@ def _parse_config(form, conn: sqlite3.Connection) -> dict:
     values["data_unit"] = data_unit
     values["inside_rules"] = form.get("inside_rules") == "on"
     values["mac_lookup_online"] = form.get("mac_lookup_online") == "on"
+    values["ignore_own_traffic"] = form.get("ignore_own_traffic") == "on"
     cidrs = [c.strip() for c in str(form.get("lan_cidrs", "")).replace(",", "\n").splitlines() if c.strip()]
     if not cidrs:
         raise ValueError("Give at least one LAN CIDR.")

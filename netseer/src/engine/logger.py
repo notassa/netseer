@@ -24,6 +24,7 @@ PROGRESS_EVERY = 5000
 NULL_IPS = {"0.0.0.0", "255.255.255.255"}
 SCAN_MIN_PORTS = 50            # probed ports on one host that make a port scan (NetSeer's own check, CONCEPTS A3)
 SCAN_PROBE_PKTS = 3            # a TCP flow with at most this many packets to the server is a probe
+TAILSCALE_PORT = 41641         # Tailscale's default WireGuard UDP port
 SCAN_SID = 9000001
 TRAFFIC_BUCKET_S = 5           # traffic_stats bucket width in seconds
 
@@ -179,6 +180,26 @@ def is_external(ip: str | None, nets: list[IPNetwork]) -> bool:
                 or addr.is_reserved)
 
 
+def canonical_ip(ip: str | None) -> str | None:
+    """The address in one standard spelling (Suricata writes IPv6 in full), or None if it is not an IP."""
+    try:
+        return str(ipaddress.ip_address(ip))
+    except (TypeError, ValueError):
+        return None
+
+
+def is_own_traffic(event: dict[str, Any], own_ips: frozenset[str]) -> bool:
+    """True for an alert on a flow this machine started, or on Tailscale UDP to or from it."""
+    if not own_ips:
+        return False
+    src, dest = canonical_ip(event.get("src_ip")), canonical_ip(event.get("dest_ip"))
+    starter = canonical_ip((event.get("flow") or {}).get("src_ip")) or src
+    if starter in own_ips:
+        return True
+    return event.get("proto") == "UDP" and TAILSCALE_PORT in (event.get("src_port"), event.get("dest_port")) \
+        and (src in own_ips or dest in own_ips)
+
+
 @dataclass
 class EveLogger:
     """Streams eve.json events for one analysis and writes the normalised, enriched rows.
@@ -194,6 +215,8 @@ class EveLogger:
     n_events: int = 0
     n_alerts: int = 0
     n_bad_lines: int = 0
+    n_ignored: int = 0
+    own_ips: frozenset[str] = frozenset()
     _alerts: list[tuple] = field(default_factory=list)
     _hosts: dict[str, _Host] = field(default_factory=dict)
     _mac_hostname: dict[str, str] = field(default_factory=dict)
@@ -222,6 +245,9 @@ class EveLogger:
         if etype == "stats":
             return
         self.n_events += 1
+        if etype == "alert" and is_own_traffic(event, self.own_ips):
+            self.n_ignored += 1                  # before host/external tracking, so it adds no alert counts
+            return
         ts = to_utc(event.get("timestamp"))
         if etype == "flow":
             # Flows flushed at the end of a pcap carry an unrelated `timestamp`; their own start/end are reliable.
@@ -392,6 +418,8 @@ class EveLogger:
         for (src, dest), (first, ports) in self._probes.items():
             if len(ports) < SCAN_MIN_PORTS:
                 continue
+            if canonical_ip(src) in self.own_ips:
+                continue
             event = {"timestamp": first, "event_type": "alert", "src_ip": src, "dest_ip": dest, "proto": "TCP",
                      "alert": {"signature_id": SCAN_SID, "signature": f"NETSEER Port scan: {len(ports)} ports probed",
                                "category": "Attempted Information Leak", "severity": 2,
@@ -481,12 +509,14 @@ class EveLogger:
 
 def process_eve_file(conn: sqlite3.Connection, analysis_id: int, eve_path: Path, lan_cidrs: Iterable[str],
                      oui_csv: str, classification_file: str,
-                     on_progress: Callable[[float], None] | None = None) -> EveLogger:
+                     on_progress: Callable[[float], None] | None = None,
+                     own_ips: frozenset[str] = frozenset()) -> EveLogger:
     """Run ACP 1–2 over a whole eve.json file (offline mode) and return the logger with its counters.
 
     `on_progress(fraction)` is called every PROGRESS_EVERY lines and once at the end.
     """
-    log = EveLogger(analysis_id, parse_networks(lan_cidrs), oui_csv, load_classtypes(classification_file))
+    log = EveLogger(analysis_id, parse_networks(lan_cidrs), oui_csv, load_classtypes(classification_file),
+                    own_ips=own_ips)
     total = Path(eve_path).stat().st_size or 1
     with open(eve_path, "rb") as fh:
         for n, raw in enumerate(fh, 1):

@@ -5,6 +5,7 @@ Last updated: 2026-11-24
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-24] Add live Reprocess from stored eve.json and a development Settings tick to ignore NetSeer and Tailscale alerts
 - [2026-11-24] Network: Traffic Source and Analyses side by side with an analysis pop-up; Alerts: new columns and a detail pop-up with copyable raw eve.json
 - [2026-11-24] Add auto LAN subnet for live sessions; risk model A5-1.2: I1 becomes the device weight in network health, 3 h demo half-life, health fades on read; A5.6 health 62
 - [2026-11-23] Revert UI to before the unslop pass (keeps no-cache and severity labels); disable the unslop skill

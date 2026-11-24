@@ -8,7 +8,7 @@ import os
 import pytest
 
 from netseer.src.database import db
-from netseer.src.config import analysis_lan, setting_defaults
+from netseer.src.config import analysis_lan, set_setting, setting_defaults
 from netseer.src.engine import ingest, live
 from netseer.tests.test_auth import admin_client, csrf  # noqa: F401 - fixture
 from netseer.tests.test_contextor import conn  # noqa: F401 - fixture
@@ -183,3 +183,128 @@ def test_network_page_opens_and_stops_a_live_session(admin_client, monkeypatch):
     assert admin_client.get(f"/api/analyses/{sid}/status").json()["message"].startswith("Waiting for both")
     admin_client.post(f"/network/live/{sid}/stop", data={"csrf_token": csrf(admin_client, "/network")})
     assert conn.execute("SELECT status FROM analyses WHERE id = ?", (sid,)).fetchone()[0] == "stopped"
+
+
+def _flow_line() -> str:
+    """One flow whose internal source makes 10.0.0.5 an active device (so the reprocess keeps its type)."""
+    return json.dumps({"timestamp": "2026-10-22T10:00:59.0+0000", "event_type": "flow", "src_ip": "10.0.0.5",
+                       "dest_ip": "203.0.113.9", "proto": "TCP", "dest_port": 443,
+                       "flow": {"start": "2026-10-22T10:00:59.0+0000", "end": "2026-10-22T10:00:59.5+0000",
+                                "pkts_toserver": 6, "pkts_toclient": 0, "bytes_toserver": 600,
+                                "bytes_toclient": 0}}) + "\n"
+
+
+def test_reprocess_rebuilds_from_eve_and_keeps_device_types(conn, tmp_path):  # noqa: F811
+    sid = conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                       "VALUES (2, 'Live', 'live', 'stopped', 'x')").lastrowid
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) "
+                 "VALUES (2, '10.0.0.5', 'server', 3, 1)")
+    eve = ingest.eve_dir(tmp_path, sid) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    eve.write_text(eve_line(1) + eve_line(2) + eve_line(3) + _flow_line())
+    before = eve.read_bytes()
+    live.begin_reprocess(conn, tmp_path, sid)
+    assert conn.execute("SELECT status FROM analyses WHERE id = 2").fetchone()[0] == "processing"
+    live.run_reprocess(tmp_path / "t.db", tmp_path, sid)
+    row = conn.execute("SELECT status, n_alerts FROM analyses WHERE id = 2").fetchone()
+    assert row["status"] == "stopped" and row["n_alerts"] == 3
+    dev = conn.execute("SELECT type, criticality, attributed FROM devices "
+                       "WHERE analysis_id = 2 AND ip = '10.0.0.5'").fetchone()
+    assert (dev["type"], dev["criticality"], dev["attributed"]) == ("server", 3, 1)
+    assert eve.read_bytes() == before
+
+
+def test_failed_reprocess_keeps_device_types_for_the_retry(conn, tmp_path, monkeypatch):  # noqa: F811
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (2, 'Live', 'live', 'stopped', 'x')")
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) "
+                 "VALUES (2, '10.0.0.5', 'server', 3, 1)")
+    eve = ingest.eve_dir(tmp_path, 2) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    eve.write_text(eve_line(1) + _flow_line())
+    live.begin_reprocess(conn, tmp_path, 2)
+    real = live.run_acp
+    monkeypatch.setattr(live, "run_acp", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
+    live.run_reprocess(tmp_path / "t.db", tmp_path, 2)
+    assert conn.execute("SELECT status FROM analyses WHERE id = 2").fetchone()[0] == "failed"
+    monkeypatch.setattr(live, "run_acp", real)
+    conn.execute("UPDATE devices SET type = 'unknown', criticality = 5, attributed = 0 WHERE analysis_id = 2")
+    live.begin_reprocess(conn, tmp_path, 2)
+    live.run_reprocess(tmp_path / "t.db", tmp_path, 2)
+    dev = conn.execute("SELECT type, criticality, attributed FROM devices WHERE analysis_id = 2").fetchone()
+    assert (dev["type"], dev["criticality"], dev["attributed"]) == ("server", 3, 1)
+    assert conn.execute("SELECT 1 FROM settings WHERE key = 'reprocess_devices:2'").fetchone() is None
+
+
+def test_reprocess_refuses_open_session_or_missing_eve(conn, tmp_path):  # noqa: F811
+    sid = conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                       "VALUES (2, 'Live', 'live', 'running', 'x')").lastrowid
+    eve = ingest.eve_dir(tmp_path, sid) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    eve.write_text(eve_line(1))
+    with pytest.raises(live.LiveError, match="Only a stopped live session can be reprocessed."):
+        live.begin_reprocess(conn, tmp_path, sid)
+    conn.execute("UPDATE analyses SET status = 'stopped' WHERE id = 2")
+    eve.unlink()
+    with pytest.raises(live.LiveError, match="no stored eve.json"):
+        live.begin_reprocess(conn, tmp_path, sid)
+
+
+def test_stop_route_refuses_live_reprocess(admin_client):  # noqa: F811
+    conn = db.connect(admin_client.app.state.db_path)
+    sid = conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                       "VALUES (1, 'Live', 'live', 'processing', 'x')").lastrowid
+    eve = ingest.eve_dir(admin_client.app.state.data_dir, sid) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    eve.write_text(eve_line(1))
+    r = admin_client.post(f"/api/analyses/{sid}/stop",
+                          headers={"X-CSRF-Token": csrf(admin_client, "/network")})
+    assert r.status_code == 400 and "cannot be stopped" in r.json()["detail"]
+    assert eve.exists()
+
+
+def test_restart_fails_interrupted_reprocess(conn):  # noqa: F811
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                 "VALUES (2, 'Live', 'live', 'processing', 'x')")
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) "
+                 "VALUES (3, 'Live', 'live', 'running', 'x')")
+    ingest.mark_interrupted(conn)
+    row = conn.execute("SELECT status, error FROM analyses WHERE id = 2").fetchone()
+    assert (row["status"], row["error"]) == ("failed", "Interrupted by a NetSeer restart; press Reprocess again.")
+    assert conn.execute("SELECT status FROM analyses WHERE id = 3").fetchone()[0] == "running"
+
+
+def test_own_ips_off_by_default_and_on_when_ticked(conn, monkeypatch):  # noqa: F811
+    assert live.own_ips(conn, "eno1") == frozenset()          # default off: no `ip` call
+    set_setting(conn, "ignore_own_traffic", True)
+    stdout = json.dumps([{"ifname": "eno1", "addr_info": [
+        {"local": "10.0.0.5", "prefixlen": 24, "scope": "global"},
+        {"local": "fd00::1", "prefixlen": 64, "scope": "global"},
+        {"local": "fe80::1", "prefixlen": 64, "scope": "link"},
+    ]}])
+    monkeypatch.setattr(live.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": stdout})())
+    assert live.own_ips(conn, "eno1") == frozenset({"10.0.0.5", "fd00::1"})
+
+
+def test_reprocess_applies_the_filter(conn, tmp_path, monkeypatch):  # noqa: F811
+    sid = conn.execute("INSERT INTO analyses(id, name, mode, status, created_at, lan_if) "
+                       "VALUES (2, 'Live', 'live', 'stopped', 'x', 'eno1')").lastrowid
+    eve = ingest.eve_dir(tmp_path, sid) / "eve.json"
+    eve.parent.mkdir(parents=True, exist_ok=True)
+    own = json.dumps({"timestamp": "2026-10-22T10:00:01.0+0000", "event_type": "alert",
+                      "src_ip": "10.0.0.5", "dest_ip": "203.0.113.9", "proto": "TCP",
+                      "src_port": 4000, "dest_port": 443,
+                      "alert": {"signature_id": 1, "signature": "own", "severity": 2,
+                                "category": "Attempted Information Leak"}}) + "\n"
+    other = json.dumps({"timestamp": "2026-10-22T10:00:02.0+0000", "event_type": "alert",
+                        "src_ip": "203.0.113.9", "dest_ip": "10.0.0.5", "proto": "TCP",
+                        "src_port": 4000, "dest_port": 22,
+                        "alert": {"signature_id": 2, "signature": "other", "severity": 2,
+                                  "category": "Attempted Information Leak"}}) + "\n"
+    eve.write_text(own + other)
+    before = eve.read_bytes()
+    monkeypatch.setattr(live, "own_ips", lambda conn, lan_if: frozenset({"10.0.0.5"}))
+    live.begin_reprocess(conn, tmp_path, sid)
+    live.run_reprocess(tmp_path / "t.db", tmp_path, sid)
+    rows = conn.execute("SELECT src_ip FROM alerts WHERE analysis_id = 2").fetchall()
+    assert [r["src_ip"] for r in rows] == ["203.0.113.9"]
+    assert eve.read_bytes() == before

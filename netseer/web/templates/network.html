@@ -74,7 +74,7 @@
         <td>{{ a.mode }}</td>
         <td>
           <span class="badge {{ a.status | status_class }} js-status">{{ a.status | replace('_', ' ') }}</span>
-          {% if a.mode == "live" and a.status in active_statuses %}
+          {% if a.mode == "live" and a.status in live_open_states %}
           <div class="muted js-message" style="max-width:260px">{{ live_message(a) }}</div>
           {% elif a.status in active_statuses %}
           <div class="stage-label"><span class="js-stage"></span><span class="js-pct"></span></div>
@@ -121,7 +121,7 @@
         <input type="hidden" name="next" value="{{ '/devices' if a.status == 'awaiting_attribution' else '/alerts' }}">
         <button class="btn small primary" type="submit">Open</button>
       </form>
-      {% if a.mode == "live" and a.status in active_statuses and user.role == "admin" %}
+      {% if a.mode == "live" and a.status in live_open_states and user.role == "admin" %}
       {% if a.status == "ready" %}
       <form method="post" action="/network/live/{{ a.id }}/start"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="btn small primary" type="submit">Start capture</button></form>
@@ -129,7 +129,7 @@
       <form method="post" action="/network/live/{{ a.id }}/stop" onsubmit="return confirm('Stop this live session? Its data is kept.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn small danger" type="submit">Stop</button></form>
       {% elif a.status in active_statuses %}
-      {% if user.role == "admin" and a.status != "uploading" %}
+      {% if user.role == "admin" and a.status != "uploading" and a.mode == "offline" %}
       <button class="btn small danger js-stop" type="button"
               title="Stop this run, clear its results and keep the capture for a re-run">Stop</button>
       {% endif %}
@@ -139,6 +139,12 @@
       <form method="post" action="/network/analyses/{{ a.id }}/rerun" onsubmit="return confirm('Analyse all files of this session? Current results and device types for this analysis are replaced.')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="btn small {{ 'primary' if a.status == 'pending' }}" type="submit">{{ 'Analyse' if a.status == 'pending' else 'Re-analyse' }}</button>
+      </form>
+      {% endif %}
+      {% if a.mode == "live" and a.status in ("stopped", "failed") %}
+      <form method="post" action="/network/analyses/{{ a.id }}/reprocess" onsubmit="return confirm('Rebuild this session from its stored eve.json? Suricata does not run again, so no new detections appear. Alerts, incidents and saved AI explanations are replaced. Device types are kept.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn small" type="submit">Reprocess</button>
       </form>
       {% endif %}
       <form method="post" action="/network/analyses/{{ a.id }}/delete" onsubmit="return confirm('Delete this analysis and its stored files?')">

@@ -20,8 +20,9 @@ from netseer.src.config import adopt_lan, analysis_lan, app_config, get_setting,
 from netseer.src.database import db
 from netseer.src.engine import oui
 from netseer.src.engine.acp import run_acp
-from netseer.src.engine.ingest import classification_file, eve_dir
-from netseer.src.engine.logger import EveLogger, load_classtypes, parse_networks
+from netseer.src.engine.ingest import PROGRESS, _clear_results, _progress_lock, _run_lock, classification_file, eve_dir, set_progress
+from netseer.src.engine.logger import EveLogger, canonical_ip, load_classtypes, parse_networks, process_eve_file
+from netseer.src.engine.networks import run_discovery
 
 SYS_NET = Path("/sys/class/net")
 POLL_S = 5                            # state polls; waiting_traffic needs rx_packets to rise between two of them
@@ -87,6 +88,29 @@ def nic_subnet(name: str) -> str | None:
                 continue
             return str(ipaddress.ip_network(f"{local}/{prefixlen}", strict=False))
     return None
+
+
+def own_ips(conn, lan_if: str | None) -> frozenset[str]:
+    """This machine's addresses on the session's LAN NIC when the development filter is on, else empty.
+
+    shortcut: uses the NIC's addresses now, so a reprocess after a DHCP change misses the old IP; store them per session if that matters.
+    """
+    if not get_setting(conn, "ignore_own_traffic") or not lan_if:
+        return frozenset()
+    try:
+        addrs = json.loads(subprocess.run(["ip", "-j", "addr", "show", "dev", lan_if],
+                                          capture_output=True, text=True).stdout or "[]")
+    except (OSError, ValueError):
+        return frozenset()
+    out = set()
+    for entry in addrs:
+        for info in entry.get("addr_info", []):
+            if not info.get("local") or info.get("scope") == "link":
+                continue
+            ip = canonical_ip(info["local"])
+            if ip is not None:
+                out.add(ip)
+    return frozenset(out)
 
 
 def create_session(conn, mirror: str, lan: str, sys_net: Path = SYS_NET) -> int:
@@ -188,7 +212,7 @@ def tick(conn, data_dir: Path, analysis_id: int) -> int:
     shortcut: the port-scan check sees one interval's flows at a time, so a scan slower than SCAN_MIN_PORTS
     ports per interval is missed; keep probe counts across ticks if that matters.
     """
-    row = conn.execute("SELECT eve_offset FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+    row = conn.execute("SELECT eve_offset, lan_if FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
     lines, offset = _new_lines(eve_dir(data_dir, analysis_id) / "eve.json", row["eve_offset"], analysis_id)
     _last_tick[analysis_id] = time.monotonic()
     if not lines:
@@ -196,7 +220,7 @@ def tick(conn, data_dir: Path, analysis_id: int) -> int:
             conn.execute("UPDATE analyses SET eve_offset = ? WHERE id = ?", (offset, analysis_id))
         return 0
     log = EveLogger(analysis_id, parse_networks(analysis_lan(conn, analysis_id)), str(app_config("oui_csv")),
-                    load_classtypes(classification_file()))
+                    load_classtypes(classification_file()), own_ips=own_ips(conn, row["lan_if"]))
     for line in lines:
         log.feed(conn, line)
     log.finish(conn)
@@ -255,3 +279,60 @@ def can_control(nic: str) -> bool:
     r = subprocess.run(["sudo", "-n", "-l", "/usr/bin/systemctl", "start", f"netseer-live@{nic}.service"],
                        capture_output=True, text=True)
     return r.returncode == 0
+
+
+def begin_reprocess(conn, data_dir: Path, analysis_id: int) -> None:
+    """Claim a stopped or failed live session for rebuilding from its stored eve.json (no Suricata run)."""
+    eve = eve_dir(data_dir, analysis_id) / "eve.json"
+    if not eve.is_file() or eve.stat().st_size == 0:
+        raise LiveError("This session has no stored eve.json.")
+    cur = conn.execute("UPDATE analyses SET status = 'processing', error = NULL WHERE id = ? AND mode = 'live' "
+                       "AND status IN ('stopped', 'failed')", (analysis_id,))
+    if cur.rowcount != 1:
+        raise LiveError("Only a stopped live session can be reprocessed.")
+    set_progress(analysis_id, "queued")
+
+
+def run_reprocess(db_path: Path, data_dir: Path, analysis_id: int) -> None:
+    """Background job: rebuild a stopped live session from its stored eve.json, keeping its device types."""
+    conn = db.connect(db_path)
+    try:
+        with _run_lock:
+            # Kept in settings until success, so a failed or interrupted run cannot lose the owner's device types.
+            key = f"reprocess_devices:{analysis_id}"
+            saved = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            if saved:
+                kept = json.loads(saved[0])
+            else:
+                kept = [dict(r) for r in conn.execute("SELECT ip, type, criticality, attributed FROM devices "
+                                                      "WHERE analysis_id = ?", (analysis_id,))]
+                conn.execute("INSERT INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(kept)))
+            _clear_results(conn, analysis_id)
+            eve = eve_dir(data_dir, analysis_id) / "eve.json"
+            eve_size = eve.stat().st_size
+            lan_if = conn.execute("SELECT lan_if FROM analyses WHERE id = ?", (analysis_id,)).fetchone()["lan_if"]
+            log = process_eve_file(conn, analysis_id, eve, analysis_lan(conn, analysis_id),
+                                   str(app_config("oui_csv")), classification_file(),
+                                   on_progress=lambda f: set_progress(analysis_id, "processing", 100 * f),
+                                   own_ips=own_ips(conn, lan_if))
+            conn.executemany("UPDATE devices SET type = ?, criticality = ?, attributed = ? "
+                             "WHERE analysis_id = ? AND ip = ?",
+                             [(r["type"], r["criticality"], r["attributed"], analysis_id, r["ip"]) for r in kept])
+            run_discovery(conn, analysis_id, log.evidence)
+            set_progress(analysis_id, "correlating")
+            acp = run_acp(conn, analysis_id)
+            conn.execute("UPDATE analyses SET status = 'stopped', error = NULL, eve_offset = ? WHERE id = ?",
+                         (eve_size, analysis_id))
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            db.audit(conn, None, "analysis_reprocessed",
+                     f"analysis {analysis_id}: {log.n_events} events, {log.n_alerts} alerts, "
+                     f"{log.n_ignored} own alerts ignored, "
+                     f"{acp['groups']} alert groups, {acp['incidents']} possible incidents")
+        oui.online_vendors(conn, analysis_id)
+    except Exception as exc:  # noqa: BLE001 - any failure is recorded on the analysis and shown in the UI
+        conn.execute("UPDATE analyses SET status = 'failed', error = ? WHERE id = ?", (str(exc)[:500], analysis_id))
+        db.audit(conn, None, "analysis_failed", f"analysis {analysis_id}: {exc}")
+    finally:
+        with _progress_lock:
+            PROGRESS.pop(analysis_id, None)
+        conn.close()

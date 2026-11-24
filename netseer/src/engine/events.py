@@ -20,6 +20,8 @@ EVENTS: dict[str, tuple[str, str, str]] = {
     # Process log
     "upload_started": ("process", "info", "Upload started"),
     "analysis_succeeded": ("process", "info", "Analysis succeeded"),
+    "analysis_reprocess": ("process", "info", "Live reprocess started"),
+    "analysis_reprocessed": ("process", "info", "Live session reprocessed from stored eve.json"),
     "analysis_failed": ("process", "error", "Analysis failed"),
     "analysis_interrupted": ("process", "warning", "Analysis interrupted"),
     "capture_truncated": ("process", "warning", "Capture cut off (analysed up to the cut)"),

@@ -255,3 +255,56 @@ def test_link_local_traffic_counts_as_on_the_lan():
     nets = parse_networks(["192.168.0.0/16"])
     assert _on_lan("fe80::1", nets) and _on_lan("169.254.10.1", nets) and _on_lan("ff02::fb", nets)
     assert not _on_lan("8.8.8.8", nets) and not _on_lan("2001:4860:4860::8888", nets)
+
+
+def test_is_own_traffic_rule():
+    own = frozenset({"192.168.100.24"})
+    # a reply: this machine started the flow, so the packet source is the outside host.
+    assert logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "203.0.113.9", "dest_ip": "192.168.100.24", "proto": "TCP",
+         "flow": {"src_ip": "192.168.100.24"}}, own)
+    # Tailscale UDP to this machine, started by an outside host.
+    assert logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "203.0.113.9", "dest_ip": "192.168.100.24", "proto": "UDP",
+         "src_port": 50000, "dest_port": 41641}, own)
+    # plain TCP from outside to this machine is not ours.
+    assert not logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "203.0.113.9", "dest_ip": "192.168.100.24", "proto": "TCP"}, own)
+    # Tailscale UDP between two other hosts.
+    assert not logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "203.0.113.9", "dest_ip": "198.51.100.7", "proto": "UDP",
+         "dest_port": 41641}, own)
+    # an empty own set drops nothing.
+    assert not logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "192.168.100.24", "dest_ip": "203.0.113.9", "proto": "TCP"}, frozenset())
+    # IPv6 own in compressed form matches the fully written event address.
+    assert logger.is_own_traffic(
+        {"event_type": "alert", "src_ip": "fd00:0:0:0:0:0:0:1", "dest_ip": "2001:db8::2", "proto": "TCP"},
+        frozenset({"fd00::1"}))
+
+
+def test_logger_drops_own_alerts_but_keeps_flows(tmp_path):
+    path = tmp_path / "own.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    log = logger.EveLogger(1, logger.parse_networks(setting_defaults()["lan_cidrs"]), OUI,
+                           logger.load_classtypes(CLASSIFICATION), own_ips=frozenset({"192.168.100.24"}))
+
+    def alert(src, dest, sid):
+        return json.dumps({"timestamp": "2026-10-21T10:00:00.0+0000", "event_type": "alert",
+                           "src_ip": src, "dest_ip": dest, "proto": "TCP", "src_port": 4000, "dest_port": 22,
+                           "alert": {"signature_id": sid, "signature": "x", "severity": 2,
+                                     "category": "Attempted Information Leak"}})
+
+    log.feed(conn, alert("192.168.100.24", "203.0.113.9", 1))      # own: dropped
+    log.feed(conn, alert("203.0.113.9", "192.168.100.24", 2))      # other: kept
+    log.feed(conn, json.dumps({"timestamp": "2026-10-21T10:00:00.0+0000", "event_type": "flow",
+                               "src_ip": "192.168.100.24", "dest_ip": "8.8.8.8", "proto": "TCP", "dest_port": 443,
+                               "flow": {"start": "2026-10-21T10:00:00.0+0000", "end": "2026-10-21T10:00:00.5+0000",
+                                        "pkts_toserver": 6, "pkts_toclient": 0,
+                                        "bytes_toserver": 600, "bytes_toclient": 0}}))
+    log.finish(conn)
+    assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
+    assert log.n_ignored == 1 and log.n_events == 3
+    assert conn.execute("SELECT packets, bytes FROM packet_stats").fetchone() is not None

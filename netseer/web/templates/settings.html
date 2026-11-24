@@ -100,6 +100,11 @@
       Look up unknown MAC vendors online</label>
     <div class="field-hint">When the local vendor lists have no entry, ask maclookup.app. Only the first 6 hex digits
       (the vendor part) are sent; answers are cached until Detonate. Randomised MACs are never sent.</div>
+    <label style="font-weight:normal;margin-top:.6rem"><input type="checkbox" name="ignore_own_traffic" {{ 'checked' if config.ignore_own_traffic }}>
+      Ignore NetSeer and Tailscale alerts (development)</label>
+    <div class="field-hint">Live sessions skip alerts from connections this machine started and Tailscale traffic to or from it.
+      Attacks from other hosts toward NetSeer still alert. Traffic and eve.json are kept: use Reprocess to apply a change to a stopped session.
+      Keep this off for evaluation results.</div>
     <h3>Data Representation</h3>
     <label for="cfg-data-unit">Traffic Volume unit</label>
     <select id="cfg-data-unit" name="data_unit" style="width:10rem">

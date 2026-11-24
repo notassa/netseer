@@ -50,6 +50,7 @@ def network_page(request: Request, user=Depends(require_user), conn: sqlite3.Con
         "sessions": [r for r in rows if r["mode"] == "offline" and r["status"] not in ingest.ACTIVE_STATUSES],
         "max_upload_mb": get_setting(conn, "max_upload_mb"),
         "active_statuses": ingest.ACTIVE_STATUSES + live.OPEN_STATES,
+        "live_open_states": live.OPEN_STATES,
         "nics": live.interfaces(),
         "live_open": any(r["mode"] == "live" and r["status"] in live.OPEN_STATES for r in rows),
         "live_message": live.message,
@@ -225,11 +226,30 @@ def rerun_analysis(request: Request, analysis_id: int, background: BackgroundTas
     return response
 
 
+@router.post("/network/analyses/{analysis_id}/reprocess", dependencies=[Depends(verify_csrf)])
+def reprocess_analysis(request: Request, analysis_id: int, background: BackgroundTasks, admin=Depends(require_admin),
+                       conn: sqlite3.Connection = Depends(get_db)):
+    """Rebuild a stopped or failed live session from its stored eve.json (no Suricata run)."""
+    _analysis(conn, analysis_id)
+    try:
+        live.begin_reprocess(conn, request.app.state.data_dir, analysis_id)
+    except live.LiveError as exc:
+        return redirect("/network", "error", str(exc))
+    audit(conn, admin["id"], "analysis_reprocess", f"analysis {analysis_id}")
+    background.add_task(live.run_reprocess, request.app.state.db_path, request.app.state.data_dir, analysis_id)
+    response = redirect("/network", "info", "Reprocessing the stored eve.json; this page updates by itself.")
+    set_cookie(response, ANALYSIS_COOKIE, str(analysis_id))
+    return response
+
+
 @router.post("/api/analyses/{analysis_id}/stop", dependencies=[Depends(verify_csrf_header)])
 def stop_analysis(analysis_id: int, request: Request, admin=Depends(require_admin),
                   conn: sqlite3.Connection = Depends(get_db)):
     """Stop a queued or running analysis; its results are cleared and its captures kept for a re-run."""
-    if _analysis(conn, analysis_id)["status"] not in ("queued", "running_suricata", "processing"):
+    row = _analysis(conn, analysis_id)
+    if row["mode"] == "live":
+        raise HTTPException(status_code=400, detail="A live reprocess cannot be stopped.")
+    if row["status"] not in ("queued", "running_suricata", "processing"):
         raise HTTPException(status_code=400, detail="This analysis is not running.")
     ingest.stop(conn, request.app.state.data_dir, analysis_id)
     audit(conn, admin["id"], "analysis_stop_requested", f"analysis {analysis_id}")

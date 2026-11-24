@@ -197,6 +197,7 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
   - Save the offset.
 - New internal devices raise the attribution prompt (a non-blocking banner and modal).
 - **One record per session:** every start creates a new `analyses` row named `Live — <mirror NIC> — <start time>`; Stop sets `stopped_at`.
+- **Reprocess:** `POST /network/analyses/<id>/reprocess` (admin) rebuilds a stopped or failed live session from its stored eve.json without Suricata, keeps device choices (held in `settings` key `reprocess_devices:<id>` until success) and never deletes the eve file. Setting `ignore_own_traffic` (default off) drops alerts on flows started by the LAN NIC and UDP 41641 to or from it, in live ticks and Reprocess only.
 
 ## 7. AI (`ai/`, C3)
 - **llm_caller.py:**
@@ -232,7 +233,7 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 | Page | Must show | Cycle |
 |---|---|---|
 | Setup / Login | First launch: "Create administrator". Otherwise username + password, lockout message | C1 |
-| Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses list in the right half (Name, Mode, Status, Alerts, Created), row click opens a pop-up (open, rename, files, **Info** capture checks (A16), re-analyse, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop | C1 / C4 |
+| Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses list in the right half (Name, Mode, Status, Alerts, Created), row click opens a pop-up (open, rename, files, **Info** capture checks (A16), re-analyse or live Reprocess, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop | C1 / C4 |
 | Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17); long service lists fold behind "+N more" | C1–C2 |
 | Alerts | Packets per *x* minutes line chart (Update button), **"Detected Alert Classes"** scrollable horizontal bar chart, filterable table (Alert ID, Time, Source:port, Destination:port, Proto, Class, Severity High…Info), row click opens a pop-up with structured details and the raw eve.json + Copy | C1 |
 | Incidents | Table: Incident ID, band chip, score, title, rule, hosts, span, count. Detail: group timeline (Gantt of group spans, scrollable, steps of 1/5/10/20/40/60 min), **factor breakdown table** (factor, value, why, evidence), raw alerts, "Explain with AI" | C2 |

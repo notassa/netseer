@@ -36,6 +36,7 @@
         </select>
       </form>
       {% if selected %}<span class="badge {{ selected.status | status_class }}">{{ selected.status | replace('_', ' ') }}</span>{% endif %}
+      {% if dev_filter %}<span class="badge warn" title="Live sessions skip alerts from NetSeer and Tailscale">Dev filter on</span>{% endif %}
       {% endif %}
       <div class="spacer"></div>
       {% set sess = request.state.session %}

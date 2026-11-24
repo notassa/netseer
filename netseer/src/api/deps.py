@@ -16,7 +16,7 @@ from fastapi import Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from netseer.src.config import WEB_DIR, app_config
+from netseer.src.config import WEB_DIR, app_config, get_setting
 from netseer.src.database import db
 
 SESSION_COOKIE = "netseer_session"
@@ -205,7 +205,8 @@ def layout_context(request: Request, conn: sqlite3.Connection, active: str) -> d
     if selected is not None and selected["mode"] == "live":      # live attribution banner (A13)
         new_devices = conn.execute("SELECT COUNT(*) FROM devices WHERE analysis_id = ? AND attributed = 0",
                                    (selected["id"],)).fetchone()[0]
-    return {"active": active, "analyses": analyses, "selected": selected, "live_new_devices": new_devices}
+    return {"active": active, "analyses": analyses, "selected": selected, "live_new_devices": new_devices,
+            "dev_filter": get_setting(conn, "ignore_own_traffic")}
 
 
 def order_by(params: dict[str, str], columns: dict[str, str], default: str) -> str:
