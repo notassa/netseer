@@ -7,11 +7,17 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 - Prompt "read dump.md #Inbox"
 
 ## Inbox
-- make left sidebar unaffect by the site scroll (stay in position).
-- reorganize Settings page into proper ui/ux structure.
-- make the ui/ux appears properly in mobile version as well.
 
 ## Reviewed
+- [2026-11-24] LAN CIDRs auto from local subnet → conflicted with A15; done for live sessions, custom list wins, offline unchanged → CONCEPTS A15 → e4d48f7
+- [2026-11-24] Decay / half-life → mostly done; demo default 3 h, production 7 days, health fades on read; Elastic 30 days recorded as a window → CONCEPTS A5.4/A15 → e4d48f7
+- [2026-11-24] Remove I1 from impact, criticality as device weight (Option B) → conflicted with A5.2/A5.4; done, applied once at network step → CONCEPTS A5.2/A5.4/A5.6 → e4d48f7
+- [2026-11-24] Replace damped_union with rank-weighted sum, no k^1.5 → conflicted with itself (Elastic example matches k^1.5); owner took the recommendation, damped_union kept → CONCEPTS A5.4 → e4d48f7
+- [2026-11-24] Network health, contributors, triage label → done; A5.6 health 62 → CONCEPTS A5.4/A5.6 → e4d48f7
+- [2026-11-24] Alert severity / volume unchanged → duplicate, no work → e4d48f7
+- [2026-11-24] Scoring tests and risk_eval → done; "split never raises" is impossible for identical incidents, so the rise is bounded below 0.09 → e4d48f7
+- [2026-11-24] Spec sync, papers in report/references → done in docs; report text still to update on Windows → WRITEUP §4.5 → e4d48f7
+- [2026-11-24] Commit README.md → done → f20f2d3
 - [2026-11-23] Reorganize Settings → done in f93cc03, reverted by owner with the unslop UI, back in Inbox → 83c7255
 - [2026-11-23] Proper mobile UI → done in f93cc03, reverted by owner with the unslop UI, back in Inbox → 83c7255
 - [2026-11-23] All graphs broken → new bug from stale cached app.js; fixed with no-cache on static files → 92f8c77
