@@ -17,10 +17,6 @@
 <div class="card">
   <h2 style="margin-top:0">Traffic Volume{% if subtitle %} <span class="muted">{{ subtitle }}</span>{% endif %}</h2>
   {% if traffic.points %}
-  <div class="row-actions" style="margin-bottom:.5rem;align-items:center">
-    <button type="button" class="btn small primary" id="traffic-mode-total" aria-pressed="true">Total</button>
-    <button type="button" class="btn small" id="traffic-mode-ie" aria-pressed="false">Ingress-Egress</button>
-  </div>
   <div class="chart-box" style="height:240px"><canvas id="traffic-chart"></canvas></div>
   <span class="muted" id="traffic-bin-note" role="status"></span>
   {% elif traffic.needs_reanalysis %}

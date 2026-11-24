@@ -93,6 +93,7 @@
 </div>
 {% if selected and traffic %}
 {{ traffic_card(traffic, subtitle=selected.name) }}
+<div class="card"><h2 style="margin-top:0">Protocols</h2><div id="network-protos"></div></div>
 {% endif %}
 {% endblock %}
 
@@ -195,12 +196,14 @@
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script src="/static/js/binsettings.js"></script>
 <script src="/static/js/traffic.js"></script>
+<script src="/static/js/protopies.js"></script>
 <script>
 (function () {
   const css = getComputedStyle(document.documentElement);
   const v = n => css.getPropertyValue(n).trim();
   Chart.defaults.color = v("--muted"); Chart.defaults.borderColor = v("--border");
   trafficChart({{ traffic | tojson }}, "{{ data_unit }}", {{ selected.id }});
+  protoPies(document.getElementById("network-protos"), {{ selected.id }}, "", "{{ data_unit }}");
 })();
 </script>
 {% endif %}

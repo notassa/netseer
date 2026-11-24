@@ -9,7 +9,7 @@ import pytest
 
 from netseer.src.config import CONFIG_DIR, setting_defaults
 from netseer.src.database import db
-from netseer.src.engine import logger
+from netseer.src.engine import ingest, logger
 from netseer.src.engine.alert_mix import alert_mix
 from netseer.src.engine.oui import PRIVATE_MAC, vendor_for
 
@@ -308,3 +308,96 @@ def test_logger_drops_own_alerts_but_keeps_flows(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
     assert log.n_ignored == 1 and log.n_events == 3
     assert conn.execute("SELECT packets, bytes FROM packet_stats").fetchone() is not None
+
+
+def test_mdns_response_names_device_and_adds_service(tmp_path):
+    path = tmp_path / "mdns.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    eve = tmp_path / "eve.json"
+    events = [
+        # a flow makes 192.168.1.20 an active device
+        {"event_type": "flow", "src_ip": "192.168.1.20", "dest_ip": "8.8.8.8", "proto": "UDP", "dest_port": 53,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 1, "pkts_toclient": 1,
+                  "bytes_toserver": 70, "bytes_toclient": 90}},
+        {"event_type": "mdns", "src_ip": "192.168.1.20", "src_port": 5353, "dest_ip": "224.0.0.251", "proto": "UDP",
+         "mdns": {"type": "response",
+                  "answers": [{"rrname": "_dosvc._tcp.local", "ptr": "DESKTOP-4CVO3UB._dosvc._tcp.local"}],
+                  "additionals": [
+                      {"rrname": "DESKTOP-4CVO3UB._dosvc._tcp.local",
+                       "srv": {"priority": 0, "weight": 0, "port": 7680, "name": "DESKTOP-4CVO3UB.local"}},
+                      {"rrname": "DESKTOP-4CVO3UB.local", "a": "192.168.1.20"}]}},
+        # a request only queries: no name
+        {"event_type": "mdns", "src_ip": "192.168.1.21", "src_port": 5353, "dest_ip": "224.0.0.251", "proto": "UDP",
+         "mdns": {"type": "request", "queries": [{"rrname": "_dosvc._tcp.local"}]}},
+        # a UUID (privacy) name is skipped
+        {"event_type": "mdns", "src_ip": "192.168.1.22", "src_port": 5353, "dest_ip": "224.0.0.251", "proto": "UDP",
+         "mdns": {"type": "response",
+                  "additionals": [{"rrname": "8eca5399-163c-46e7-a330-dd618336a6b5.local", "a": "192.168.1.22"}]}},
+    ]
+    eve.write_text("\n".join(map(json.dumps, events)))
+    logger.process_eve_file(conn, 1, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
+    devices = {r["ip"]: r for r in conn.execute("SELECT * FROM devices")}
+    assert devices["192.168.1.20"]["hostname"] == "DESKTOP-4CVO3UB.local"
+    services = {s["port"]: s for s in json.loads(devices["192.168.1.20"]["services_json"])}
+    assert services[7680] == {"port": 7680, "proto": "tcp", "app": "dosvc"}
+    assert devices["192.168.1.22"]["hostname"] is None          # UUID name skipped
+    assert devices["192.168.1.21"]["hostname"] is None          # request adds no name
+
+
+def test_dhcp_hostname_beats_mdns(tmp_path):
+    path = tmp_path / "dhcp.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    eve = tmp_path / "eve.json"
+    events = [
+        {"event_type": "dhcp", "src_ip": "0.0.0.0", "dest_ip": "255.255.255.255", "proto": "UDP",
+         "dhcp": {"client_mac": "aa:bb:cc:dd:ee:01", "hostname": "dhcp-wins", "assigned_ip": "192.168.1.20"}},
+        {"event_type": "flow", "src_ip": "192.168.1.20", "dest_ip": "8.8.8.8", "proto": "UDP", "dest_port": 53,
+         "ether": {"src_macs": ["aa:bb:cc:dd:ee:01"]},
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 1, "pkts_toclient": 1,
+                  "bytes_toserver": 70, "bytes_toclient": 90}},
+        {"event_type": "mdns", "src_ip": "192.168.1.20", "src_port": 5353, "dest_ip": "224.0.0.251", "proto": "UDP",
+         "mdns": {"type": "response",
+                  "additionals": [{"rrname": "DESKTOP-4CVO3UB.local", "a": "192.168.1.20"}]}},
+    ]
+    eve.write_text("\n".join(map(json.dumps, events)))
+    logger.process_eve_file(conn, 1, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
+    device = conn.execute("SELECT * FROM devices WHERE ip = '192.168.1.20'").fetchone()
+    assert device["hostname"] == "dhcp-wins"
+
+
+def test_proto_stats(tmp_path):
+    path = tmp_path / "proto.db"
+    db.init_db(path)
+    conn = db.connect(path)
+    conn.execute("INSERT INTO analyses(id, name, mode, status, created_at) VALUES (1, 't', 'offline', 'processing', 'x')")
+    eve = tmp_path / "eve.json"
+    events = [
+        # INT->EXT UDP dns: packets 2, bytes 160
+        {"event_type": "flow", "src_ip": "192.168.1.20", "dest_ip": "8.8.8.8", "proto": "UDP", "app_proto": "dns",
+         "dest_port": 53,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 1, "pkts_toclient": 1,
+                  "bytes_toserver": 70, "bytes_toclient": 90}},
+        # INT->INT TCP app_proto "failed" -> "unknown": packets 5, bytes 500
+        {"event_type": "flow", "src_ip": "192.168.1.20", "dest_ip": "192.168.1.30", "proto": "TCP",
+         "app_proto": "failed", "dest_port": 80,
+         "flow": {"start": "2026-10-21T10:00:00.0+0000", "pkts_toserver": 3, "pkts_toclient": 2,
+                  "bytes_toserver": 300, "bytes_toclient": 200}},
+    ]
+    eve.write_text("\n".join(map(json.dumps, events)))
+    logger.process_eve_file(conn, 1, eve, setting_defaults()["lan_cidrs"], OUI, CLASSIFICATION)
+    rows = {(r["ip"], r["kind"], r["name"]): r for r in conn.execute("SELECT * FROM proto_stats")}
+    assert (rows[("", "proto", "UDP")]["flows"], rows[("", "proto", "UDP")]["packets"],
+            rows[("", "proto", "UDP")]["bytes"]) == (1, 2, 160)
+    assert (rows[("", "proto", "TCP")]["flows"], rows[("", "proto", "TCP")]["packets"],
+            rows[("", "proto", "TCP")]["bytes"]) == (1, 5, 500)
+    assert rows[("", "app", "dns")]["flows"] == 1 and rows[("", "app", "unknown")]["flows"] == 1
+    assert rows[("192.168.1.20", "proto", "UDP")]["flows"] == 1
+    assert rows[("192.168.1.20", "proto", "TCP")]["flows"] == 1
+    assert rows[("192.168.1.30", "proto", "TCP")]["flows"] == 1
+    assert ("8.8.8.8", "proto", "UDP") not in rows
+    ingest._clear_results(conn, 1)                       # re-analysis clears the new table too
+    assert conn.execute("SELECT COUNT(*) FROM proto_stats").fetchone()[0] == 0

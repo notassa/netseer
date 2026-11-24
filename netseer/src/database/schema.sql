@@ -192,6 +192,18 @@ CREATE TABLE IF NOT EXISTS traffic_stats (
     PRIMARY KEY (analysis_id, second)
 ) WITHOUT ROWID;
 
+-- Flows per protocol: per internal device IP, and ip = '' for the whole network (each flow counted once).
+CREATE TABLE IF NOT EXISTS proto_stats (
+    analysis_id  INTEGER NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+    ip           TEXT NOT NULL,      -- internal device IP, or '' = whole network
+    kind         TEXT NOT NULL,      -- 'proto' (transport: TCP, UDP, ICMP, ...) or 'app' (Suricata app_proto)
+    name         TEXT NOT NULL,      -- 'unknown' when app_proto is missing or "failed"
+    flows        INTEGER NOT NULL DEFAULT 0,
+    packets      INTEGER NOT NULL DEFAULT 0,
+    bytes        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (analysis_id, ip, kind, name)
+) WITHOUT ROWID;
+
 -- Every IP outside the LAN CIDRs seen in an analysis (Devices → External sources).
 CREATE TABLE IF NOT EXISTS external_hosts (
     id           INTEGER PRIMARY KEY,

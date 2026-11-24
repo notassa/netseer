@@ -5,6 +5,7 @@ Last updated: 2026-11-24
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-24] Device names from mDNS; Traffic Volume without Ingress-Egress; Devices Data column; Protocol and App protocol pies (new `proto_stats`) on Network and in the device pop-up
 - [2026-11-24] Cloud LLM provider list (OpenAI, Claude, DeepSeek) with one encrypted key each, DeepSeek 400 fixed (json_object); Information opens on NetSeer details with memory/disk %; Devices row pop-up; chart time-axis gear pop-up (1–1000 s/min/h); tests no longer touch the real database
 - [2026-11-24] Stop opencode probing port 8000 for vLLM (owner config, outside the repo)
 - [2026-11-24] Traffic Volume: Total default, time axis follows bin, shared chart also on Network; network map hides outside sources behind Internet, curved links; gateway from ARP askers and IPv6 router advertisements (Suricata ARP log on)

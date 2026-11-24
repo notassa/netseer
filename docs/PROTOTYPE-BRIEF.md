@@ -107,6 +107,7 @@ incident_groups(incident_id, group_id)
 interpretations(id PK, incident_id, intent, model, evidence_hash, output_json, verification_json, created_at, latency_s)
 packet_stats(analysis_id, minute, packets, bytes)            -- per minute; flows spread over their duration
 traffic_stats(analysis_id, second, ii_packets, ii_bytes, ie_packets, ie_bytes, ei_packets, ei_bytes)  -- per 5 s (UTC epoch); ii = INT>INT, ie = INT>EXT, ei = EXT>INT
+proto_stats(analysis_id, ip, kind, name, flows, packets, bytes, PK(analysis_id, ip, kind, name))  -- ip '' = whole network; kind 'proto' (TCP/UDP/ICMP…) or 'app' (app_proto, 'unknown' when missing/failed)
 external_hosts(id PK, analysis_id, ip, hostname, direction, first_seen, last_seen, n_flows, n_alerts, bytes,
                ports_json, peers_json, UNIQUE(analysis_id, ip))
 ti_cache(indicator PK, source, result_json, fetched_at)
@@ -133,9 +134,9 @@ Index every `analysis_id` column. All pages read through `analysis_id`.
    - Devices = every internal IP in any event:
      - `mac` from `ether`
      - `vendor` from the OUI in `/usr/share/ieee-data/oui.csv`
-     - `hostname` from `dhcp.hostname`
-     - `services` from flows where the device is the destination
-   - `flow` → `packet_stats` per minute (total) and `traffic_stats` per 5 s (by packet direction).
+     - `hostname` from `dhcp.hostname`, else from `mdns` responses (A/AAAA/SRV names; UUID/hex privacy names skipped)
+     - `services` from flows where the device is the destination, plus mDNS SRV ports (advertised services)
+   - `flow` → `packet_stats` per minute (total) and `traffic_stats` per 5 s (by packet direction), and `proto_stats` (flows/packets/bytes per transport and app protocol, per internal device and for the whole network).
    - Missing values stay NULL and display as **unknown**.
    - Then network discovery (A17). If the looks-local networks hold more hosts than the devices, store them as the analysis's LAN (`settings` key `lan_cidrs:<id>`), clear the results and run Suricata + logger once more (HOME_NET and directions use the analysis's LAN everywhere).
 3. After ACP, set `awaiting_attribution`. The UI shows the Device Attribution modal for unattributed devices; saving it (or "skip, keep Unknown") moves the analysis to `done`.
@@ -233,11 +234,11 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 | Page | Must show | Cycle |
 |---|---|---|
 | Setup / Login | First launch: "Create administrator". Otherwise username + password, lockout message | C1 |
-| Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses list in the right half (Name, Mode, Status, Alerts, Created), row click opens a pop-up (open, rename, files, **Info** capture checks (A16), re-analyse or live Reprocess, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop; Traffic Volume chart of the selected analysis below (shared with Home) | C1 / C4 |
-| Devices | Table (IP, MAC, vendor, hostname, services, type, risk %), type dropdown (re-scores); row pop-up (details, type, risk, incidents of the device, alert/incident links); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17; outside sources hidden until Internet is clicked, curved links); long service lists fold behind "+N more" | C1–C2 |
+| Network | **Traffic Source** card (Session: New session + Session Name / Add to / Network Adapter); one-file upload into a session + job progress; analyses list in the right half (Name, Mode, Status, Alerts, Created), row click opens a pop-up (open, rename, files, **Info** capture checks (A16), re-analyse or live Reprocess, admin note, delete as admin); live NIC picker, state badge and stall message, Start/Stop; Traffic Volume chart of the selected analysis below (shared with Home), then Protocol + App protocol pies (`GET /api/analyses/{id}/protocols?ip=`) | C1 / C4 |
+| Devices | Table (IP, MAC, vendor, hostname, services, Data volume, type, risk %), type dropdown (re-scores); row pop-up (details, data volume, type, risk, Protocol + App protocol pies, incidents of the device, alert/incident links); attribution modal after offline analysis and for new live devices; **External sources** table; **Networks** (probable subnets/VLANs) and a movable, zoomable tree **network map** (A17; outside sources hidden until Internet is clicked, curved links); long service lists fold behind "+N more" | C1–C2 |
 | Alerts | Packets and alerts per *x* minutes line charts (gear pop-up: 1–1000 s/min/h, whole minutes), **"Detected Alert Classes"** scrollable horizontal bar chart, filterable table (Alert ID, Time, Source:port, Destination:port, Proto, Class, Severity High…Info; filters: search, IP/prefix/CIDR, SID, port, UTC time range, severity, direction, proto and class ticks, removable chips), row click opens a pop-up with structured details and the raw eve.json + Copy | C1 |
 | Incidents | Table: Incident ID, band chip, score, title, rule, hosts, span, count. Detail: group timeline (Gantt of group spans, scrollable, steps of 1/5/10/20/40/60 min), **factor breakdown table** (factor, value, why, evidence), raw alerts, "Explain with AI" | C2 |
-| Home | Analysis status card (with total traffic) on top, then health gauge + top 3 contributing devices, Traffic Volume (Total default / Ingress-Egress; gear pop-up bin 1–1000 s/min/h, rounded up to 5 s, max 1000 h; also on Network), devices at risk, top 5 incidents | C2 |
+| Home | Analysis status card (with total traffic) on top, then health gauge + top 3 contributing devices, Traffic Volume (stacked Total only; gear pop-up bin 1–1000 s/min/h, rounded up to 5 s, max 1000 h; also on Network), devices at risk, top 5 incidents | C2 |
 | AI | Sectioned explanation, Prompt Maker buttons, Prompt section (view + copy), verifier badge, flagged sentences highlighted, ref chips that expand to the evidence; **Saved explanations** list (every generated explanation stays re-openable) | C3 |
 | Information | Admin only: **NetSeer details** (default, first tab; memory and disk with %), Account activity (time, user, event, IP, MAC, vendor) and Process log (time, level, event, analysis, detail); **Clear log** per tab | C1 |
 | Settings | One tab per section: Theme (all); Accounts, Configuration, AI (backend + API keys), Knowledge base, MAC vendors (Wireshark list update), **Detonate** factory reset (admin) | C1–C3 |

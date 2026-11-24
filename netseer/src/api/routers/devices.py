@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from netseer.src.api.deps import (distinct_values, get_db, layout_context, order_by, page_qs, paging, redirect, render,
                                   require_admin, require_user, verify_csrf)
+from netseer.src.api.routers.home import format_total
 from netseer.src.api.routers.incidents import incident_rows
+from netseer.src.config import get_setting
 from netseer.src.database.db import audit
 from netseer.src.engine.acp import ensure_acp, rescore
 from netseer.src.engine.constants import DEVICE_TYPE, DEVICE_TYPE_LABEL
@@ -47,9 +49,23 @@ def devices_page(request: Request, user=Depends(require_user), conn: sqlite3.Con
         ensure_acp(conn, selected)
         rows = conn.execute("SELECT * FROM devices WHERE analysis_id = ?", (selected["id"],)).fetchall()
         bands = device_bands(conn, selected["id"])
-        devices = sorted((dict(r) | {"services": json.loads(r["services_json"] or "[]"),
-                                     "risk_label": bands.get(r["ip"], "Low")} for r in rows),
-                         key=lambda d: (ipaddress.ip_address(d["ip"]).version, int(ipaddress.ip_address(d["ip"]))))
+        unit = get_setting(conn, "data_unit")
+        vol = {r["ip"]: (r["b"], r["p"]) for r in conn.execute(
+            "SELECT ip, SUM(packets) AS p, SUM(bytes) AS b FROM proto_stats "
+            "WHERE analysis_id = ? AND kind = 'proto' GROUP BY ip", (selected["id"],))}
+        for r in rows:
+            d = dict(r)
+            d["services"] = json.loads(r["services_json"] or "[]")
+            d["risk_label"] = bands.get(r["ip"], "Low")
+            if r["ip"] in vol:
+                b, p = vol[r["ip"]]
+                d["volume"] = format_total(b, p, unit)[0]
+                d["volume_sort"] = p if unit == "packet" else b
+            else:
+                d["volume"] = None
+                d["volume_sort"] = -1
+            devices.append(d)
+        devices.sort(key=lambda d: (ipaddress.ip_address(d["ip"]).version, int(ipaddress.ip_address(d["ip"]))))
     networks = ensure_networks(conn, selected) if selected is not None else []
     pending = [d for d in devices if not d["attributed"]]
     awaiting = selected is not None and (selected["status"] == "awaiting_attribution" or selected["mode"] == "live")
@@ -60,6 +76,7 @@ def devices_page(request: Request, user=Depends(require_user), conn: sqlite3.Con
         "pending": pending,
         "show_modal": bool(pending) and awaiting,
         "types": DEVICE_TYPE_LABEL,
+        "data_unit": get_setting(conn, "data_unit"),
         **(_externals(request, conn, selected["id"]) if selected is not None else {}),
     })
 
@@ -89,6 +106,21 @@ def _externals(request: Request, conn: sqlite3.Connection, analysis_id: int) -> 
                                              "SELECT hostname FROM external_hosts WHERE analysis_id = ?",
                                        (analysis_id, analysis_id)),
     }
+
+
+@router.get("/api/analyses/{analysis_id}/protocols")
+def protocols(analysis_id: int, ip: str = "", user=Depends(require_user), conn: sqlite3.Connection = Depends(get_db)):
+    """Per-protocol and per-app traffic for one device (whole network when `ip` is empty), for the pie charts."""
+    if conn.execute("SELECT 1 FROM analyses WHERE id = ?", (analysis_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="No such analysis.")
+
+    def rows(kind: str) -> list[dict]:
+        return [{"name": r["name"], "flows": r["flows"], "packets": r["packets"], "bytes": r["bytes"]}
+                for r in conn.execute("SELECT name, flows, packets, bytes FROM proto_stats "
+                                      "WHERE analysis_id = ? AND ip = ? AND kind = ? ORDER BY bytes DESC, name",
+                                      (analysis_id, ip, kind))]
+
+    return {"proto": rows("proto"), "app": rows("app")}
 
 
 @router.get("/api/analyses/{analysis_id}/map")

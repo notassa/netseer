@@ -58,7 +58,7 @@
 <p class="muted">Internal hosts that sent traffic or answered a connection. Values NetSeer could not observe are shown as <span class="unknown">unknown</span>.</p>
 <div class="table-wrap">
 <table class="data sortable" id="devices-table">
-  <thead><tr><th data-key="ip">IP</th><th data-key="mac">MAC</th><th data-key="vendor">Vendor</th><th data-key="hostname">Hostname</th><th data-key="services">Services</th><th data-key="type">Type</th><th data-key="risk">Risk</th><th data-key="seen">Seen (UTC)</th></tr></thead>
+  <thead><tr><th data-key="ip">IP</th><th data-key="mac">MAC</th><th data-key="vendor">Vendor</th><th data-key="hostname">Hostname</th><th data-key="services">Services</th><th data-key="data">Data</th><th data-key="type">Type</th><th data-key="risk">Risk</th><th data-key="seen">Seen (UTC)</th></tr></thead>
   <tbody>
   {% for d in devices %}
   <tr class="clickable" data-device="{{ d.id }}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Open details for device {{ d.ip }}" title="Show device details">
@@ -67,6 +67,7 @@
     <td>{{ unk(d.vendor) }}</td>
     <td>{{ unk(d.hostname) }}</td>
     <td>{{ services(d.services) }}</td>
+    <td data-sort="{{ d.volume_sort }}">{{ d.volume or "—" }}</td>
     <td data-sort="{{ types[d.type] }}">
       {% if user.role == "admin" %}
       <form method="post" action="/devices/{{ d.id }}/type">
@@ -82,7 +83,7 @@
     <td data-sort="{{ d.first_seen or '' }}">{{ (d.first_seen or '')[:19] | replace('T', ' ') }}<br><span class="muted">to {{ (d.last_seen or '')[:19] | replace('T', ' ') }}</span></td>
   </tr>
   {% else %}
-  <tr><td colspan="8" class="muted">No internal devices were seen in this analysis.</td></tr>
+  <tr><td colspan="9" class="muted">No internal devices were seen in this analysis.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -176,6 +177,7 @@
       <tr><th>Vendor</th><td>{{ unk(d.vendor) }}</td></tr>
       <tr><th>Hostname</th><td>{{ unk(d.hostname) }}</td></tr>
       <tr><th>Services</th><td>{{ services(d.services) }}</td></tr>
+      <tr><th>Data</th><td>{{ d.volume or "—" }}</td></tr>
       <tr><th>Type</th><td>
         {% if user.role == "admin" %}
         <form method="post" action="/devices/{{ d.id }}/type">
@@ -193,6 +195,8 @@
       <tr><th>Last seen</th><td>{{ (d.last_seen or '')[:19] | replace('T', ' ') }}</td></tr>
     </tbody>
   </table>
+  <h3>Protocols</h3>
+  <div class="device-protos" data-ip="{{ d.ip }}"></div>
   <h3>Incidents</h3>
   <div class="device-incidents"></div>
   <p>
@@ -208,6 +212,8 @@
 {% block scripts %}
 {% if selected %}
 <script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/js/protopies.js"></script>
 <script>
 (function () {
   const css = getComputedStyle(document.documentElement);
@@ -420,14 +426,18 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("open"); });
 })();
 </script>
+{% if selected %}
 <script>
 (function () {
   const backdrop = document.getElementById("device-modal");
   if (!backdrop) return;
+  const css = getComputedStyle(document.documentElement);
+  const v = n => css.getPropertyValue(n).trim();
+  Chart.defaults.color = v("--muted"); Chart.defaults.borderColor = v("--border");
   const title = document.getElementById("device-modal-title");
   const body = document.getElementById("device-body");
   const closeBtn = document.getElementById("device-close");
-  let activeRow = null, reqId = 0;
+  let activeRow = null, reqId = 0, pies = null;
 
   function bandChip(band) {
     const s = document.createElement("span");
@@ -469,17 +479,21 @@
   }
 
   function open(row) {
+    if (pies) { pies.destroy(); pies = null; }
     activeRow = row;
     const content = document.getElementById("device-popup-" + row.dataset.device);
     title.textContent = "Device " + row.cells[0].textContent.trim();
     body.innerHTML = content ? content.innerHTML : "";
     const incs = body.querySelector(".device-incidents");
     if (incs) fillIncidents(incs, row.dataset.device);
+    const protos = body.querySelector(".device-protos");
+    if (protos) pies = protoPies(protos, {{ selected.id }}, protos.dataset.ip, "{{ data_unit }}");
     backdrop.classList.add("open");
     closeBtn.focus();
   }
   function closeModal() {
     backdrop.classList.remove("open");
+    if (pies) { pies.destroy(); pies = null; }
     if (activeRow) activeRow.focus();
   }
   document.querySelectorAll("tr[data-device]").forEach(row => {
@@ -501,4 +515,5 @@
   });
 })();
 </script>
+{% endif %}
 {% endblock %}

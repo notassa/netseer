@@ -308,12 +308,13 @@ def test_home_shows_traffic_volume_not_alert_trend(analysed):
     assert "Alert trend" not in page
 
 
-def test_home_traffic_volume_defaults_to_total(analysed):
+def test_traffic_volume_has_no_ingress_egress(analysed):
     client, _ = analysed
-    page = client.get("/").text
-    assert page.index('id="traffic-mode-total"') < page.index('id="traffic-mode-ie"')
-    total = page.split('id="traffic-mode-total"', 1)[1].split(">", 1)[0]
-    assert 'aria-pressed="true"' in total
+    for path in ("/", "/network"):
+        page = client.get(path).text
+        assert "Traffic Volume" in page
+        assert "traffic-mode-ie" not in page
+        assert "Ingress-Egress" not in page
 
 
 def test_network_shows_traffic_volume_and_shared_chart(analysed):
@@ -372,3 +373,34 @@ def test_data_unit_setting_persists_and_invalid_refused(analysed):
     form["data_unit"] = "bananas"
     client.post("/settings/config", data=form)
     assert stored() == "packet"
+
+
+def test_protocols_api(analysed):
+    client, conn = analysed
+    data = client.get("/api/analyses/1/protocols").json()
+    assert data["proto"] and data["app"]
+    for item in data["proto"] + data["app"]:
+        for key in ("name", "flows", "packets", "bytes"):
+            assert key in item
+    total = conn.execute("SELECT SUM(bytes) FROM proto_stats WHERE analysis_id = 1 AND ip = '' AND kind = 'proto'") \
+        .fetchone()[0]
+    assert sum(r["bytes"] for r in data["proto"]) == total
+    assert client.get("/api/analyses/1/protocols?ip=192.168.100.24").json()["proto"]
+    assert client.get("/api/analyses/1/protocols?ip=203.0.113.99").json() == {"proto": [], "app": []}
+    assert client.get("/api/analyses/999/protocols").status_code == 404
+
+
+def test_devices_table_has_data_column(analysed):
+    client, _ = analysed
+    page = client.get("/devices").text
+    head = page.split('id="devices-table"', 1)[1].split("</thead>", 1)[0]
+    assert ">Data</th>" in head
+    assert "/static/js/protopies.js" in page
+    assert 'class="device-protos"' in page
+
+
+def test_network_has_protocol_pies(analysed):
+    client, _ = analysed
+    page = client.get("/network").text
+    assert 'id="network-protos"' in page
+    assert "/static/js/protopies.js" in page

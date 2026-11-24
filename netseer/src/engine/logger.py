@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import sqlite3
 from collections import Counter
 from collections.abc import Callable, Iterable
@@ -132,6 +133,20 @@ def _joined(meta: dict[str, Any], key: str) -> str | None:
     return ",".join(values) if values else None
 
 
+_MDNS_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+
+
+def _mdns_name(name: str | None) -> str | None:
+    """An mDNS name with its trailing dot stripped, or None for privacy/random names."""
+    if not name:
+        return None
+    name = name.rstrip(".")
+    label = name.split(".", 1)[0]
+    if _MDNS_UUID.fullmatch(label) or re.fullmatch(r"[0-9a-f]{12,}", label, re.IGNORECASE):
+        return None
+    return name
+
+
 @dataclass
 class _Host:
     first_seen: str | None = None
@@ -225,6 +240,8 @@ class EveLogger:
     _traffic: dict[int, list[int]] = field(default_factory=dict)
     _externals: dict[str, _External] = field(default_factory=dict)
     _dns_names: dict[str, str] = field(default_factory=dict)     # IP → name, from DNS answers
+    _mdns_names: dict[str, str] = field(default_factory=dict)    # IP → name, from mDNS responses
+    _protos: dict[tuple[str, str, str], list[int]] = field(default_factory=dict)   # (ip, kind, name) → [flows, packets, bytes]
     _probes: dict[tuple[str, str], list] = field(default_factory=dict)   # (src, dest) → [first start, probed ports]
     evidence: NetEvidence = field(default_factory=NetEvidence)   # subnet/VLAN evidence and map links (A17)
 
@@ -266,6 +283,8 @@ class EveLogger:
             self._flow(event)
         elif etype == "dhcp":
             self._dhcp(event.get("dhcp") or {})
+        elif etype == "mdns":
+            self._mdns(event)
 
     def _alert_row(self, event: dict[str, Any], ts: str | None, raw: str) -> tuple:
         alert = event.get("alert") or {}
@@ -337,14 +356,14 @@ class EveLogger:
     def _flow(self, event: dict[str, Any]) -> None:
         flow = event.get("flow") or {}
         start = to_utc(flow.get("start"))
+        packets = int(flow.get("pkts_toserver") or 0) + int(flow.get("pkts_toclient") or 0)
+        nbytes = int(flow.get("bytes_toserver") or 0) + int(flow.get("bytes_toclient") or 0)
         if (event.get("proto") == "TCP" and event.get("dest_port") is not None and start
                 and int(flow.get("pkts_toserver") or 0) <= SCAN_PROBE_PKTS):
             probe = self._probes.setdefault((event.get("src_ip"), event.get("dest_ip")), [start, set()])
             probe[0] = min(probe[0], start)
             probe[1].add(int(event["dest_port"]))
         if start:
-            packets = int(flow.get("pkts_toserver") or 0) + int(flow.get("pkts_toclient") or 0)
-            nbytes = int(flow.get("bytes_toserver") or 0) + int(flow.get("bytes_toclient") or 0)
             end = to_utc(flow.get("end")) or start
             for minute, p, b in spread_minutes(start, end, packets, nbytes):
                 bucket = self._packets.setdefault(minute, [0] * 2)
@@ -364,6 +383,7 @@ class EveLogger:
                     bucket = self._traffic.setdefault(second, [0] * 6)
                     bucket[idx] += sp
                     bucket[idx + 1] += sb
+        self._proto(event, packets, nbytes)
         server = self._host(event.get("dest_ip"))
         if server is None:
             return
@@ -387,6 +407,50 @@ class EveLogger:
             if ip and ip not in NULL_IPS:
                 self._mac_ip[mac] = ip
 
+    def _proto(self, event: dict[str, Any], packets: int, nbytes: int) -> None:
+        """Accumulate per-protocol and per-app counts (whole network + per internal device)."""
+        proto = (event.get("proto") or "unknown").upper()
+        app = event.get("app_proto")
+        app = "unknown" if not app or app == "failed" else app
+        src, dest = event.get("src_ip"), event.get("dest_ip")
+        keys: list[tuple[str, str, str]] = []
+        if _on_lan(src, self.nets) or _on_lan(dest, self.nets):
+            keys += [("", "proto", proto), ("", "app", app)]
+        for ip in {ip for ip in (src, dest) if is_internal(ip, self.nets)}:
+            keys += [(ip, "proto", proto), (ip, "app", app)]
+        for key in keys:
+            row = self._protos.setdefault(key, [0, 0, 0])
+            row[0] += 1
+            row[1] += packets
+            row[2] += nbytes
+
+    def _mdns(self, event: dict[str, Any]) -> None:
+        mdns = event.get("mdns") or {}
+        if mdns.get("type") != "response":
+            return
+        src = event.get("src_ip")
+        host = self._host(src)
+        if host is None:
+            return
+        for rec in (mdns.get("answers") or []) + (mdns.get("additionals") or []) + (mdns.get("authorities") or []):
+            a = rec.get("a") or rec.get("aaaa")
+            if a:
+                name = _mdns_name(rec.get("rrname"))
+                if name:
+                    self._mdns_names[a] = name
+                    self._mdns_names.setdefault(src, name)
+            srv = rec.get("srv")
+            if isinstance(srv, dict):
+                name = _mdns_name(srv.get("name"))
+                if name:
+                    self._mdns_names.setdefault(src, name)
+                port = srv.get("port")
+                if port is not None:
+                    rrname = rec.get("rrname") or ""
+                    service = next((label[1:] for label in rrname.split(".") if label.startswith("_")), "mdns") or "mdns"
+                    proto = "tcp" if "._tcp." in rrname else "udp"
+                    host.services.add((int(port), proto, service))
+
     def _flush_alerts(self, conn: sqlite3.Connection) -> None:
         if not self._alerts:
             return
@@ -407,7 +471,7 @@ class EveLogger:
         for dhcp_mac, dhcp_ip in self._mac_ip.items():
             if dhcp_ip == ip and dhcp_mac in self._mac_hostname:
                 return self._mac_hostname[dhcp_mac]
-        return None
+        return self._mdns_names.get(ip)
 
     def _scan_alerts(self) -> None:
         """NetSeer's port-scan check: one alert per (source, host) probed on SCAN_MIN_PORTS or more TCP ports.
@@ -455,6 +519,13 @@ class EveLogger:
                 "ie_bytes = ie_bytes + excluded.ie_bytes, ei_packets = ei_packets + excluded.ei_packets, "
                 "ei_bytes = ei_bytes + excluded.ei_bytes",
                 (self.analysis_id, second, ii_p, ii_b, ie_p, ie_b, ei_p, ei_b),
+            )
+        for (ip, kind, name), (flows, packets, nbytes) in self._protos.items():
+            conn.execute(
+                "INSERT INTO proto_stats(analysis_id, ip, kind, name, flows, packets, bytes) VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(analysis_id, ip, kind, name) DO UPDATE SET flows = flows + excluded.flows, "
+                "packets = packets + excluded.packets, bytes = bytes + excluded.bytes",
+                (self.analysis_id, ip, kind, name, flows, packets, nbytes),
             )
         for ip, ext in self._externals.items():
             hostname = ext.names.most_common(1)[0][0] if ext.names else self._dns_names.get(ip)

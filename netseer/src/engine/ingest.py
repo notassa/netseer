@@ -495,7 +495,7 @@ def _clear_results(conn: sqlite3.Connection, analysis_id: int, commit: bool = Tr
     if commit:
         conn.execute("BEGIN")
     for table in ("incidents", "alert_groups", "alerts", "devices", "packet_stats", "traffic_stats",
-                  "external_hosts", "analysis_info", "host_links"):
+                  "external_hosts", "analysis_info", "host_links", "proto_stats"):
         conn.execute(f"DELETE FROM {table} WHERE analysis_id = ?", (analysis_id,))
     conn.execute("UPDATE analyses SET n_events = 0, n_alerts = 0 WHERE id = ?", (analysis_id,))
     if commit:

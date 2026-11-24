@@ -31,23 +31,18 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
   const binLabel = s => s < 60 ? s + " s" : (Math.round(s / 60 * 100) / 100) + " min";
 
   const INGRESS = "#f97316", EGRESS = "#2563eb", INTERNAL = "#7c3aed";
-  const datasets = mode => mode === "total" ? [
+  const datasets = () => [
     { label: "INT>INT", data: traffic.points.map(p => value(p).ii), borderColor: INTERNAL,
       backgroundColor: INTERNAL, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
     { label: "INT>EXT", data: traffic.points.map(p => value(p).ie), borderColor: EGRESS,
       backgroundColor: EGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
     { label: "EXT>INT", data: traffic.points.map(p => value(p).ei), borderColor: INGRESS,
       backgroundColor: INGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
-  ] : [
-    { label: "Ingress (EXT>INT)", data: traffic.points.map(p => value(p).ei), borderColor: INGRESS,
-      backgroundColor: INGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
-    { label: "Egress (INT>EXT)", data: traffic.points.map(p => -value(p).ie), borderColor: EGRESS,
-      backgroundColor: EGRESS, fill: false, tension: 0.2, pointRadius: traffic.points.length <= 60 ? 3 : 0 },
   ];
 
   const chart = new Chart(canvas, {
     type: "line",
-    data: { labels: traffic.points.map(p => p.t), datasets: datasets("total") },
+    data: { labels: traffic.points.map(p => p.t), datasets: datasets() },
     options: { maintainAspectRatio: false,
                layout: { padding: { bottom: 20 } },
                interaction: { mode: "index", intersect: false },
@@ -64,22 +59,6 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
                               ticks: { precision: 0, callback: fmt } } } },
   });
 
-  let mode = "total";
-  const buttons = { ie: document.getElementById("traffic-mode-ie"),
-                    total: document.getElementById("traffic-mode-total") };
-  const setMode = m => {
-    mode = m;
-    chart.data.datasets = datasets(m);
-    chart.options.scales.y.stacked = m === "total";
-    for (const key in buttons) {
-      buttons[key].classList.toggle("primary", key === m);
-      buttons[key].setAttribute("aria-pressed", String(key === m));
-    }
-    chart.update();
-  };
-  buttons.ie.addEventListener("click", () => setMode("ie"));
-  buttons.total.addEventListener("click", () => setMode("total"));
-
   const binNote = document.getElementById("traffic-bin-note");
   let requestId = 0;
   let settings;
@@ -88,7 +67,7 @@ window.trafficChart = function (traffic, dataUnit, analysisId) {
     seconds = fresh.seconds;
     traffic.points = fresh.points;
     chart.data.labels = fresh.points.map(p => p.t);
-    chart.data.datasets = datasets(mode);
+    chart.data.datasets = datasets();
     chart.options.scales.x.title.text = `Time (UTC), ${binLabel(seconds)} bins`;
     chart.options.scales.y.title.text = `${unitWord} per ${binLabel(seconds)}`;
     binNote.textContent = fresh.raised ? `Raised to ${fresh.seconds} s to keep the chart readable.` : "";
