@@ -9,6 +9,10 @@ How it works (see CLAUDE.md "dump.md: idea inbox"):
 ## Inbox
 
 ## Reviewed
+- [2026-11-24] Device hostname/services missing → new (code missed Suricata 8 `mdns` events; CONCEPTS A3 already lists mDNS); done, small gain (live 7: names 1 → 2, services 3 → 4) → CONCEPTS A3, brief §6 → 8423f71
+- [2026-11-24] Remove Ingress-Egress from Traffic Volume → conflicts with CONCEPTS A10 Home; owner approved, done → CONCEPTS A10, brief §9 → 8423f71
+- [2026-11-24] Devices Data (volume) column + Protocol/App protocol pies in the device pop-up → new, new table `proto_stats` (owner approved); unit follows Data Representation → CONCEPTS A10, brief §5/§6/§9 → 8423f71
+- [2026-11-24] Network: Protocol + App protocol pies under Traffic Volume → new; done → CONCEPTS A10, brief §9 → 8423f71
 - [2026-11-24] Information: NetSeer details default and first, % on Memory and Disk → new; done → CONCEPTS A10, brief §9 → f179dc6
 - [2026-11-24] Chart axis settings in a gear pop-up, x-axis 1–1000 s/min/h, y-axis fixed → conflicted with A10 (5–3600 s, wheel); done, wheel dropped; traffic rounds up to 5 s and Packets/Alerts to whole minutes (storage steps), max 1000 h → CONCEPTS A10, brief §9 → f179dc6
 - [2026-11-24] Cloud LLM: add DeepSeek and Claude → duplicate of the LLM Provider idea, done with it → f179dc6
