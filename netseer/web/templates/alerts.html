@@ -78,22 +78,20 @@
 </details>
 <div class="table-wrap">
 <table class="data sortable" id="alerts-table" data-server-sort>
-  <thead><tr><th data-key="id">Alert ID</th><th data-key="time">Time (UTC)</th><th data-key="severity">Severity</th><th data-key="signature">Signature</th><th data-key="class">Class</th><th data-key="direction">Direction</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th></tr></thead>
+  <thead><tr><th data-key="id">Alert ID</th><th data-key="time">Time (UTC)</th><th data-key="src">Source</th><th data-key="dest">Destination</th><th data-key="proto">Proto</th><th data-key="class">Class</th><th data-key="severity">Severity</th></tr></thead>
   <tbody>
   {% for a in rows %}
-  <tr class="clickable" data-alert="{{ a.id }}" title="Show the raw eve.json record">
+  <tr class="clickable" data-alert="{{ a.id }}" data-direction="{{ a.direction or '' }}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Open details for alert {{ a.id }}" title="Show alert details">
     <td>{{ a.id }}</td>
     <td>{{ a.ts[:19] | replace('T', ' ') if a.ts else '' }}</td>
-    <td>{{ severity_chip(a.priority) }}</td>
-    <td>{{ a.signature }} <span class="muted">({{ a.sid }})</span></td>
-    <td>{{ unk(a.classtype) }}</td>
-    <td>{{ unk(a.direction) }}</td>
     <td>{{ unk(a.src_ip) }}{% if a.src_port %}:{{ a.src_port }}{% endif %}</td>
     <td>{{ unk(a.dest_ip) }}{% if a.dest_port %}:{{ a.dest_port }}{% endif %}</td>
     <td>{{ a.proto or '' }}{% if a.app_proto %}/{{ a.app_proto }}{% endif %}</td>
+    <td>{{ unk(a.classtype) }}</td>
+    <td>{{ severity_chip(a.priority) }}</td>
   </tr>
   {% else %}
-  <tr><td colspan="9" class="muted">No alerts match.</td></tr>
+  <tr><td colspan="7" class="muted">No alerts match.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -103,10 +101,18 @@
 {% endblock %}
 
 {% block modals %}
-<aside class="drawer" id="raw-drawer" aria-label="Raw alert">
-  <header><strong>Raw eve.json record</strong><button class="btn small" id="raw-close">Close</button></header>
-  <pre id="raw-body"></pre>
-</aside>
+<div class="modal-backdrop" id="alert-modal" role="dialog" aria-modal="true" aria-labelledby="alert-modal-title">
+  <div class="modal">
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem">
+      <h2 id="alert-modal-title" style="margin:0">Alert</h2>
+      <button class="btn small" id="alert-close" type="button">Close</button>
+    </header>
+    <div id="alert-body"></div>
+    <h3>Raw eve.json</h3>
+    <button class="btn small" id="alert-copy" type="button">Copy JSON</button>
+    <textarea id="alert-raw" readonly rows="14" style="width:100%;font-family:monospace" aria-label="Raw eve.json record"></textarea>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -178,13 +184,129 @@
     show("classtype");
   }
 
-  const drawer = document.getElementById("raw-drawer"), body = document.getElementById("raw-body");
-  document.querySelectorAll("tr[data-alert]").forEach(row => row.addEventListener("click", async () => {
-    body.textContent = "Loading…"; drawer.classList.add("open");
-    try { body.textContent = JSON.stringify(await getJSON(`/api/alerts/${row.dataset.alert}`), null, 2); }
-    catch (e) { body.textContent = `Could not load the record: ${e.message}`; }
-  }));
-  document.getElementById("raw-close").addEventListener("click", () => drawer.classList.remove("open"));
+  const backdrop = document.getElementById("alert-modal");
+  const modalTitle = document.getElementById("alert-modal-title");
+  const modalBody = document.getElementById("alert-body");
+  const rawArea = document.getElementById("alert-raw");
+  const copyBtn = document.getElementById("alert-copy");
+  const closeBtn = document.getElementById("alert-close");
+
+  const fieldText = v => (v == null ? "" : String(v));
+  const join = v => (v == null ? "" : (Array.isArray(v) ? v.join(", ") : String(v)));
+  const endpoint = (ip, port) => (ip == null || ip === "" ? "" : (port == null || port === "" ? String(ip) : `${ip}:${port}`));
+
+  function addSection(container, title, rows) {
+    const h = document.createElement("h3");
+    h.textContent = title;
+    container.appendChild(h);
+    const table = document.createElement("table");
+    table.className = "data";
+    const tbody = document.createElement("tbody");
+    for (const [label, value] of rows) {
+      if (value == null || value === "") continue;   // omit missing/null/empty; port 0 is a real value
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.textContent = label;
+      const td = document.createElement("td");
+      if (typeof value === "string") td.textContent = value;
+      else td.appendChild(value);
+      tr.append(th, td);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  function render(rec, row) {
+    modalBody.textContent = "";
+    const alert = rec.alert || {};
+    const meta = alert.metadata || {};
+    const sev = document.createDocumentFragment();
+    row.cells[6].childNodes.forEach(n => sev.appendChild(n.cloneNode(true)));
+    addSection(modalBody, "What happened", [
+      ["Signature", fieldText(alert.signature)],
+      ["SID", fieldText(alert.signature_id)],
+      ["Revision", fieldText(alert.rev)],
+      ["Category", fieldText(alert.category)],
+      ["Class", row.cells[5].textContent.trim()],
+      ["Severity", sev],
+      ["Action", fieldText(alert.action)],
+    ]);
+    addSection(modalBody, "Connection", [
+      ["Time", fieldText(rec.timestamp)],
+      ["Source", endpoint(rec.src_ip, rec.src_port)],
+      ["Destination", endpoint(rec.dest_ip, rec.dest_port)],
+      ["Protocol", fieldText(rec.proto)],
+      ["App protocol", fieldText(rec.app_proto)],
+      ["Direction", fieldText(row.dataset.direction)],
+      ["Interface", fieldText(rec.in_iface)],
+      ["Flow ID", rec.flow_id == null ? "" : String(rec.flow_id)],
+    ]);
+    const tactic = join(meta.mitre_tactic_name);
+    const technique = join(meta.mitre_technique_name);
+    const sigSev = join(meta.signature_severity);
+    if (tactic || technique || sigSev) {
+      addSection(modalBody, "Threat context", [
+        ["MITRE tactic", tactic],
+        ["MITRE technique", technique],
+        ["Signature severity", sigSev],
+      ]);
+    }
+    rawArea.value = JSON.stringify(rec, null, 2);
+    copyBtn.disabled = false;
+  }
+
+  let reqId = 0, activeRow = null;
+  function open(row) {
+    activeRow = row;
+    reqId += 1;
+    const id = reqId;
+    modalTitle.textContent = `Alert ${row.dataset.alert}`;
+    modalBody.textContent = "Loading…";
+    rawArea.value = "";
+    copyBtn.disabled = true;
+    backdrop.classList.add("open");
+    closeBtn.focus();
+    getJSON(`/api/alerts/${row.dataset.alert}`).then(rec => {
+      if (id !== reqId) return;   // a newer row was opened meanwhile
+      render(rec, row);
+    }).catch(e => {
+      if (id !== reqId) return;
+      modalBody.textContent = `Could not load the record: ${e.message}`;
+      rawArea.value = "";
+      copyBtn.disabled = true;
+    });
+  }
+
+  function closeModal() {
+    backdrop.classList.remove("open");
+    if (activeRow) activeRow.focus();
+  }
+
+  document.querySelectorAll("tr[data-alert]").forEach(row => {
+    row.addEventListener("click", () => open(row));
+    row.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(row); }
+    });
+  });
+  closeBtn.addEventListener("click", closeModal);
+  backdrop.addEventListener("click", e => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && backdrop.classList.contains("open")) closeModal();
+  });
+  copyBtn.addEventListener("click", async () => {
+    const t = rawArea;
+    t.focus(); t.select();
+    let ok = false;
+    if (navigator.clipboard) {
+      try { await navigator.clipboard.writeText(t.value); ok = true; }
+      catch (e) { ok = document.execCommand("copy"); }
+    } else {
+      ok = document.execCommand("copy");
+    }
+    copyBtn.textContent = ok ? "Copied" : "Copy failed";
+    setTimeout(() => { copyBtn.textContent = "Copy JSON"; }, 1500);
+  });
 })();
 </script>
 {% endif %}

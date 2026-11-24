@@ -139,15 +139,18 @@ def test_external_sources_table_search_and_sort(analysed):
 def test_alerts_sort_whitelist_and_search_lists(analysed):
     client, conn = analysed
     table = lambda url: client.get(url).text.split('id="alerts-table"', 1)[1]
+    row = lambda signature: 'data-alert="%d"' % conn.execute("SELECT id FROM alerts WHERE signature = ?",
+                                                             (signature,)).fetchone()[0]
+    beacon, plain = row("TEST Malware C2 beacon"), row("TEST alert without metadata")
     asc = table("/alerts?sort=severity&dir=asc")
-    assert asc.index("TEST Malware C2 beacon") < asc.index("TEST alert without metadata")
+    assert asc.index(beacon) < asc.index(plain)
     desc = table("/alerts?sort=severity&dir=desc")
-    assert desc.index("TEST alert without metadata") < desc.index("TEST Malware C2 beacon")
+    assert desc.index(plain) < desc.index(beacon)
     page = client.get("/alerts").text
     assert client.get("/alerts?sort=1;DROP TABLE alerts").status_code == 200
     assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 4
     assert 'list="f-src-list"' in page and '<option value="192.168.100.60">' in page
-    assert 'data-key="signature"' in page and 'id="alerts-table" data-server-sort' in page
+    assert 'data-key="severity"' in page and 'id="alerts-table" data-server-sort' in page
 
 
 def test_alert_tick_filters_combine_values(analysed):
@@ -181,7 +184,7 @@ def test_column_heads_get_their_meaning_as_tooltips(analysed):
     assert 'class="band high">High' in page
     head = page.split('id="alerts-table"', 1)[1].split("</thead>", 1)[0]
     assert re.findall(r'data-key="([^"]+)"', head) == \
-        ["id", "time", "severity", "signature", "class", "direction", "src", "dest", "proto"]
+        ["id", "time", "src", "dest", "proto", "class", "severity"]
     heads = set(re.findall(r"<th[^>]*>([^<{]+)</th>", page))
     assert heads and heads <= set(COLUMN_HELP), heads - set(COLUMN_HELP)     # every alerts-page column is explained
 
