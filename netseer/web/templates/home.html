@@ -25,7 +25,7 @@
     <div class="gauge"><canvas id="health-gauge"></canvas>
       <div class="reading"><strong>{{ net.health }}</strong><span class="band {{ health_label | lower }}">{{ 100 - net.health }}% risk · {{ health_label }}</span></div>
     </div>
-    <div class="field-hint">100 = no scored incident. Every incident above Note lowers it, weighted by its score, its age and the device it involves; the worst counts fully and each further one less (A5.4). {{ net.n_scored }} scored incident{{ 's' if net.n_scored != 1 }}.</div>
+    <div class="field-hint">100 = no scored incident. Every incident above Note lowers it, weighted by its score, its age and the device it involves; the worst counts fully and each further one less (A5.4). A triage index, not a probability of compromise. {{ net.n_scored }} scored incident{{ 's' if net.n_scored != 1 }}.</div>
     <h3>What lowers it most</h3>
     <ul class="list-plain">
     {% for i in net.top_incidents %}

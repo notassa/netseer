@@ -19,7 +19,7 @@ from netseer.src.api.deps import (ANALYSIS_COOKIE, SESSION_COOKIE, get_db, layou
                                   require_admin, require_user, verify_csrf)
 from netseer.src.config import app_config, get_setting, set_setting
 from netseer.src.database.db import audit, connect
-from netseer.src.engine import ingest, oui
+from netseer.src.engine import ingest, live, oui
 from netseer.src.engine.acp import run_acp
 from netseer.src.engine.scorer import roll_up
 
@@ -31,7 +31,7 @@ THEMES = ("white", "black")
 CONFIG_FIELDS = {
     "aggregation_gap_s": ("Aggregation gap", int, 10, 86400, "seconds"),
     "correlation_window_min": ("Correlation window", int, 1, 1440, "minutes"),
-    "half_life_days": ("Risk decay half-life", float, 0.1, 365, "days"),
+    "half_life_days": ("Risk decay half-life", float, 0.01, 365, "days"),
     "max_upload_mb": ("Max pcap upload size (per file)", int, 1, 2048, "MB"),
     "live_interval_s": ("Live processing interval", int, 5, 3600, "seconds"),
 }
@@ -58,6 +58,8 @@ def settings_page(request: Request, user=Depends(require_user), conn: sqlite3.Co
         "has_user": any(a["role"] == "user" for a in accounts),
         "config_fields": CONFIG_FIELDS,
         "config": {key: get_setting(conn, key) for key in (*CONFIG_FIELDS, "lan_cidrs", "inside_rules", "mac_lookup_online", "data_unit")},
+        "lan_detected": [{"name": n["name"], "subnet": s} for n in live.interfaces() if n["has_ipv4"]
+                         and (s := live.nic_subnet(n["name"]))],
         "data_units": DATA_UNITS,
         "kb": _kb_status(),
         "oui": oui.manuf_info() | {"updating": _oui_lock.locked()},

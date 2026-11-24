@@ -1,10 +1,11 @@
 # NetSeer — progress
 
-Last updated: 2026-11-23
+Last updated: 2026-11-24
 
 ## Change log
 Format: `[YYYY-MM-DD] change`, newest first. One line per finished task. Details: `docs/RAD-PLAN.md` (Build record, decisions to confirm), `docs/WRITEUP.md` §8 (Tables 4.12/4.13), `docs/PROTOTYPE-BRIEF.md` §3a (environment).
 
+- [2026-11-24] Add auto LAN subnet for live sessions; risk model A5-1.2: I1 becomes the device weight in network health, 3 h demo half-life, health fades on read; A5.6 health 62
 - [2026-11-23] Revert UI to before the unslop pass (keeps no-cache and severity labels); disable the unslop skill
 - [2026-11-23] Group Settings into a side menu and sections; make all pages work at phone width with a slide-in menu
 - [2026-11-23] Fix charts breaking on a stale cached app.js; show severity as High, Medium, Low, Info without [n]

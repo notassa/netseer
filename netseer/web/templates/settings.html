@@ -90,6 +90,7 @@
     {% endfor %}
     <label for="cfg-lan">LAN CIDRs (one per line)</label>
     <textarea id="cfg-lan" name="lan_cidrs" rows="3" style="width:100%">{{ config.lan_cidrs | join('\n') }}</textarea>
+    <div class="field-hint">Live sessions use the LAN adapter's subnet automatically{% if lan_detected %} (detected: {{ lan_detected | join(', ', attribute='subnet') }} on {{ lan_detected | join(', ', attribute='name') }}){% endif %}. Offline captures use this list. Change this list to override both.</div>
     <label style="font-weight:normal;margin-top:.6rem"><input type="checkbox" name="inside_rules" {{ 'checked' if config.inside_rules }}>
       Detect attacks from inside the LAN</label>
     <div class="field-hint">Lets rules written for outside attackers fire for LAN hosts too (Suricata EXTERNAL_NET = any).

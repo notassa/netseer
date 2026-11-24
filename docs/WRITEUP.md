@@ -176,7 +176,7 @@ Bradford. It is from 2014, so it is cited as a methodological precedent only. Wh
 **Impact I:** I1 asset criticality (device type, A14: Server 9 … Guest 3, Unknown 5), I2 service sensitivity
 (SSH/SMB/RDP/databases 9, web 6, other 4), I3 technical impact by classtype (trojan/C2 9 … recon 3).
 
-`A = (I1 + I2) / 2`  `I = I3 × (0.5 + 0.5 × A/9)`
+`I = I3 × (0.5 + 0.5 × I2/9)`. I1 is not part of I since model A5-1.2: it weights the device in network health.
 
 The attack type sets the ceiling and the asset scales it. With a plain mean, a scan against an SSH server came out
 Critical. With this formula, a scan (recon classtypes have I3 = 3) stays at most Medium impact.
@@ -194,15 +194,15 @@ Score `R = 10 · (L/9) · (I/9)` (0–10) sorts incidents inside a band and feed
 with its value, evidence and a one-line reason, so "why is this High?" is always answerable.
 
 ### 4.4 Device risk and network health
-- Per incident: `pᵢ = R/10 · 0.5^(age / half-life)` (half-life 7 days; Note incidents left out).
+- Per incident: `pᵢ = R/10 · 0.5^(age / half-life)` (half-life 3 h for the demo, 7 days for production; Note incidents left out).
 - **Rank-damped union** of values x sorted worst first: `D = 1 − Π (1 − x_k / k^1.5)`, where k is the rank. One
   incident gives exactly its own value. More incidents never lower it. It stays below 1 unless an incident has
   R = 10 and age 0. If one attack is split into two similar incidents, the second counts at 1/2.83 of its value, so
   D rises far less than the plain union, which nearly doubles it. On UNSW-NB15 (measured before the October rule
   fixes) the plain union gave health 7/2/0 at windows of 60/30/5 min; the damped one gave 56/55/55.
 - **Device risk** P(d) = D over its incidents, shown as a %. Its **colour is the worst band** among its incidents.
-- **Network health** = 100 · (1 − P(N)), where P(N) = D over all non-Note incidents of xᵢ = pᵢ. Asset value
-  is counted once, inside each incident's impact. Health is a triage index, not a probability of compromise; Home
+- **Network health** = 100 · (1 − P(N)), where P(N) = D over one term per device, `w_d · P(d)`, with w_d = I1/9. Asset value
+  is counted once, at this step; incidents with no device use the Unknown weight. Health is a triage index, not a probability of compromise; Home
   lists the incidents that cost the most points. The k^1.5 damping is a NetSeer heuristic, backed by the
   split-stability measurement above, not by a published source.
 
@@ -216,10 +216,10 @@ LAN 10.0.0.0/24; server 10.0.0.5 (Server, I1 9), workstation 10.0.0.23 (Workstat
 | I | 3 × 1.0 = **3.0** Medium | 9 × 0.833 = **7.5** High |
 | Band, R | **Medium**, 2.16 | **High**, 4.94 |
 
-Roll-up (age 0, so no decay): x(b) = 0.494; x(a) = 0.216, damped by 2^1.5 →
-P(N) = 1 − 0.506 × 0.924 = 0.533 → **health 47**.
+Roll-up (age 0, so no decay): x(workstation) = 0.494 × 6/9 = 0.329; x(server) = 0.216, damped by 2^1.5 →
+P(N) = 1 − 0.671 × 0.924 = 0.381 → **health 62**.
 
-> **Report action:** report Table 4.7 still shows health = 53, the value from before rank damping. Update it to 47 (I1 counted once since 2026-11-18).
+> **Report action:** report Table 4.7 still shows health = 53. Update it to 62 (model A5-1.2, 2026-11-24). Also update the §2 text that says criticality is counted inside incident impact: it is now the device weight in network health.
 
 ---
 

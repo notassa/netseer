@@ -47,10 +47,11 @@ def test_pages_build_incidents_for_analyses_from_before_c2(scored):
 
 def test_home_shows_health_and_top_incidents(scored):
     client, conn = scored
+    conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('half_life_days', '7')")
     page = client.get("/")
     assert page.status_code == 200
     assert "Top incidents" in page.text and "Devices at risk" in page.text
-    assert 0 < health(client) <= 47      # A5.6 gives 47; the extra probe of the server can only lower it
+    assert 0 < health(client) <= 63      # A5.6 gives 62; the 40-minute-old incidents decay slightly at a 7-day half-life
 
 
 def test_incident_detail_and_missing_incident(scored):
@@ -74,8 +75,8 @@ def test_changing_a_device_type_rescores_and_updates_home(scored):
     r = client.post(f"/devices/{server}/type", data={"csrf_token": csrf(client, "/devices"), "type": "guest"})
     assert r.status_code == 303
     after = conn.execute("SELECT score, factors_json FROM incidents WHERE rule = 'R2'").fetchone()
-    assert json.loads(after["factors_json"])["I1"]["value"] == 3 and after["score"] < score_before
-    assert scorer.network_health(conn, 1)["p_network"] < before   # lower I1 → lower R → less network risk
+    assert json.loads(after["factors_json"])["I1"]["value"] == 3 and after["score"] == score_before
+    assert scorer.network_health(conn, 1)["p_network"] < before   # lower I1 → lower device weight → less network risk
 
 
 def test_changing_the_correlation_window_rebuilds_incidents_and_updates_home(scored):

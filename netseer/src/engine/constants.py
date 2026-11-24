@@ -38,7 +38,7 @@ I3_CLASSTYPE = {
     1: ["not-suspicious"],
 }
 I3_OTHER = 4
-# L = mean(L1..L5 present);  A = (I1+I2)/2;  I = I3*(0.5+0.5*A/9)
+# L = mean(L1..L5 present);  I = I3*(0.5+0.5*I2/9)
 
 # A5.3 levels and the OWASP matrix; key = (L level, I level).
 LEVEL_CUTS = (3.0, 6.0)          # <3 Low, <6 Medium, else High
@@ -54,7 +54,7 @@ BANDS = ("Critical", "High", "Medium", "Low", "Note")      # sort order, worst f
 
 # A5.4 roll-up (rank-damped union).  p_i = R_i/10 * 0.5**(age/half_life), Note excluded
 # D(x sorted desc) = 1 - prod_k(1 - x_k / k**DAMPING_P);  P(d) = D(p_i of incidents with d)
-# P(N) = D(p_i over all non-Note incidents; I1 already in R, so no weight);  health = round(100*(1-P(N)))
+# P(N) = D(w_d*P(d), w_d = I1/9; no-device incidents use Unknown weight);  health = round(100*(1-P(N)))
 DAMPING_P = 1.5                  # NetSeer heuristic, checked by split stability (CONCEPTS A5.4)
 RISK_CUTS = ((90, "Critical"), (70, "High"), (40, "Medium"), (0, "Low"))   # device risk %, same as R x10
 

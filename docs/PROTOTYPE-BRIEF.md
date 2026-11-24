@@ -160,14 +160,14 @@ I3_CLASSTYPE = {
   2: ["policy-violation", "misc-activity"],
   1: ["not-suspicious"],
 }  # anything else -> 4
-# L = mean(L1..L5 present);  A = (I1+I2)/2;  I = I3*(0.5+0.5*A/9)
+# L = mean(L1..L5 present);  I = I3*(0.5+0.5*I2/9)
 # level(x): <3 Low, <6 Medium, else High
 MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Medium",
           ("Medium","Low"): "Low", ("Medium","Medium"): "Medium", ("Medium","High"): "High",
           ("High","Low"): "Medium", ("High","Medium"): "High", ("High","High"): "Critical"}   # key = (L level, I level)
 # score R = 10*(L/9)*(I/9); sort by band then R
 # p_i = R_i/10 * 0.5**(age/half_life), Note excluded;  D(x sorted desc) = 1 - prod_k(1 - x_k / k**1.5)
-# P(d) = D(p_i of incidents involving d);  P(N) = D((I1_i/9)*p_i over all non-Note incidents)
+# P(d) = D(p_i of incidents involving d);  P(N) = D(w_d*P(d), w_d = I1/9; no-device incidents at Unknown weight)
 # health = round(100*(1-P(N)))   (CONCEPTS A5.4: rank-damped union)
 ```
 - `factors_json` stores, per factor, `{value, evidence, why}`.
@@ -251,7 +251,7 @@ MATRIX = {("Low","Low"): "Note", ("Low","Medium"): "Low", ("Low","High"): "Mediu
 **C2 — ACP & risk**
 
 5. Contextor (R1–R4). **Check:** synthetic alerts produce the expected incident count per rule.
-6. Scorer + roll-up. **Check:** the CONCEPTS A5.6 worked example reproduces exactly (L, I, band, R, P(d), health 53).
+6. Scorer + roll-up. **Check:** the CONCEPTS A5.6 worked example reproduces exactly (L, I, band, R, P(d), health 62).
 7. Incidents + Home + NetSeer configuration. **Check:** changing a device type or a window re-scores and updates Home.
 
 **C3 — Interpretation**

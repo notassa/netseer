@@ -20,7 +20,7 @@ Source of requirements: `dump.md`. When this file and other docs disagree, this 
 | **Band** | Note / Low / Medium / High / Critical, from the OWASP matrix of the likelihood and impact levels (A5.3). The main ranking. |
 | **Score R** | 10 · (L/9) · (I/9), 0–10. Sorts incidents inside a band and feeds the roll-up. |
 | **Device risk** | P(d), the rank-damped union of the decayed incident probabilities involving a device, as a %. Coloured by the device's worst band. |
-| **Network health** | 100 · (1 − P(N)), where P(N) is the rank-damped union over every non-Note incident. A triage index, not a probability of compromise. |
+| **Network health** | 100 · (1 − P(N)), where P(N) is the rank-damped union of the criticality-weighted device risks (an incident with no device counts at Unknown weight). A triage index, not a probability of compromise. |
 
 ### A1. What NetSeer is and is not (fixed)
 - **Is:** Suricata eve.json → **ACP** (deterministic, 7 stages) → evidence package → **RAG** → LLM explanation → **verifier** → web dashboard on a LAN-only mini PC.
@@ -96,15 +96,15 @@ The reference thesis (Munir, R., 2014, *A Quantitative Security Assessment of Mo
 
 | ID | Factor | Values |
 |---|---|---|
-| I1 | Asset criticality | Highest value among the internal devices involved, from Device Attribution (A14) |
+| I1 | Asset criticality | Highest value among the internal devices involved, from Device Attribution (A14). **Not part of I since model A5-1.2:** kept as evidence; each device's own I1 is its weight in P(N) (A5.4) |
 | I2 | Service sensitivity | 9: ports 21, 22, 23, 139, 445, 1433, 3306, 3389, 5432, 5900 · 6: 80, 443, 8080, 8443 · 4: other |
 | I3 | Potential technical impact (by Suricata classtype; worst in the incident) | 9: trojan-activity, command-and-control, successful-admin, successful-user · 8: attempted-admin, shellcode-detect, exploit-kit · 7: attempted-user, web-application-attack · 6: attempted-dos, denial-of-service, default-login-attempt, credential-theft · 3: attempted-recon, network-scan, successful-recon-limited · 2: policy-violation, misc-activity · 1: not-suspicious · 4: other/unknown |
 
-**Impact combination.** The attack type sets the ceiling, and the asset scales it, the same way CVSS environmental requirements modify impact:
+**Impact combination.** The attack type sets the ceiling, and the service scales it:
 
-`A = (I1 + I2) / 2`  `I = I3 × (0.5 + 0.5 × A / 9)`
+`I = I3 × (0.5 + 0.5 × I2 / 9)`
 
-Why not a plain mean: averaging let asset value outvote the attack type. With a mean, an external port scan against an SSH server came out Critical. With the modifier, a scan stays at most Medium impact, while malware traffic on a workstation stays High.
+Why not a plain mean: averaging let the service outvote the attack type. With a mean, an external port scan against an SSH server came out Critical. With the modifier, a scan stays at most Medium impact, while malware traffic on a workstation stays High.
 
 #### A5.3 Band and sort score
 - **Levels** for L and for I: Low [0,3) · Medium [3,6) · High [6,9].
@@ -120,20 +120,21 @@ Why not a plain mean: averaging let asset value outvote the attack type. With a 
 - **Breakdown** (stored as `factors_json`): every factor's value, the evidence it came from (alert IDs, device, port, classtype) and a one-line reason, e.g. `"L2": {"value": 6.0, "why": "100 alerts"}`. The UI and the LLM both read it, so "why is this High?" is always answerable from stored data. It also carries `_meta`: the model version (`A5-1.0`; bump it when A5 rules change) and data-quality flags (`unattributed_devices`, `no_internal_device`, `ti_checked`). The incident page shows them under the factor table, and an unconfirmed device type becomes an unknown in the LLM evidence.
 
 #### A5.4 Device risk and network health (probabilistic roll-up from Munir Ch.3, rank-damped)
-- **Per-incident probability proxy:** pᵢ = (Rᵢ / 10) · 0.5^(ageᵢ / half_life). Note-band incidents are excluded. Age runs from the incident's last_seen to the analysis end (offline) or to now (live). half_life defaults to 7 days and is configurable.
-- **Rank-damped union.** Munir's union P = 1 − Π(1 − xᵢ) assumes independent events. Its result also grows with the *number* of incidents, and that number depends on how the contextor splits the same alerts. NetSeer therefore damps each term by its rank (p = 1.5). This exponent is a **NetSeer heuristic**: no published source fixes it (Elastic's public entity-risk docs give no formula), so it is justified by the split-stability measurement below, not by citation:
+- **Per-incident probability proxy:** pᵢ = (Rᵢ / 10) · 0.5^(ageᵢ / half_life). Note-band incidents are excluded. Age runs from the incident's last_seen to the analysis end (offline) or to now (live). `half_life_days` is one configurable value: **0.125 days (3 h) by default for the demo**, so risk visibly fades, and 7 days for production. Elastic's 30-day entity-risk default is a lookback window, not a half-life.
+- **Rank-damped union.** Munir's union P = 1 − Π(1 − xᵢ) assumes independent events. Its result also grows with the *number* of incidents, and that number depends on how the contextor splits the same alerts. NetSeer therefore damps each term by its rank (p = 1.5). This exponent is a **NetSeer heuristic**: no published source states it. Elastic's docs give no formula, but their worked example (70, 45, 21, 21, 21 → 36.16) matches Σ score/k^1.5 ÷ 2.612, the same rank weight (our inference). It is justified by the split-stability measurement below:
   `D(x₁ ≥ x₂ ≥ … ≥ xₙ) = 1 − Π_k (1 − x_k / k^1.5)`
   - One value: D = x, which is the plain union.
   - Adding values never lowers D.
   - D stays below 1 even for unlimited values, because Σ k^-1.5 converges, so it does not saturate.
   - It hardly changes when one incident is split into two. On UNSW-NB15 the health was 56/55/55 at correlation windows of 60/30/5 minutes, against 7/2/0 for the plain union.
 - **Device risk:** P(d) = D over pᵢ of the incidents involving device d, shown as a percentage. The device's **colour and label are the worst band** among its non-Note incidents (Low when it has none), so a device in a High incident always shows High. The percentage cut-offs (<40 Low · 40–69 Medium · 70–89 High · ≥90 Critical) colour only the network health gauge: pᵢ = R/10, and R ≥ 9 needs L and I both ≥ 8.5, so %-based device colours disagreed with the bands. Home lists as "devices at risk" those whose worst band is Medium or above, by P(d).
-- **Network risk:** P(N) = D over **every non-Note incident** of xᵢ = pᵢ. Every scored incident therefore moves the health, including incidents between hosts outside the LAN CIDRs. Asset value (I1) is counted **once**, inside each incident's impact I (NIST SP 800-30, OWASP: asset value belongs to impact), so the roll-up adds no I1 weight. Until 2026-11-18 it also weighted xᵢ by I1/9, which counted I1 twice.
-- **Network health (Home gauge)** = round(100 · (1 − P(N))). It is a reproducible, decomposable **triage index**, not a calibrated probability of compromise (ISACA, Standardized Scoring for Security and Risk Metrics, 2017). To explain the number, the Home page lists the top 3 incidents with the points each one costs, and the top 3 devices (largest w_d·P(d), w_d = I1/9: a display ranking only, not part of health). An incident's points are its share of the drop (100 − health) in proportion to −ln(1 − x_(k)/k^1.5), the log-additive split of the product, so the points add up to the drop (within rounding).
+- **Network risk:** P(N) = D over one term per device, x_d = w_d · P(d) with w_d = I1/9 (Option B). Criticality is applied **once**, here: P(d) itself stays unweighted. An incident with no internal device adds its own term at the Unknown weight (5/9), so every scored incident still moves the health. Terms are computed from freshly decayed pᵢ on every read, so health fades after an attack stops even with no new alerts.
+- **Network health (Home gauge)** = round(100 · (1 − P(N))). It is a reproducible, decomposable **triage index**, not a calibrated probability of compromise (ISACA, Standardized Scoring for Security and Risk Metrics, 2017). The Home page lists the top 3 incidents with the points each one costs, and the top 3 devices by w_d·P(d). The drop (100 − health) is split across network terms in proportion to −ln(1 − x_(k)/k^1.5), then inside each device across its incidents the same way, so the points add up to the drop (within rounding). Limits: one worst-case incident on an Unknown device leaves health at 44 or more (Guest 67), because the weight caps its term.
 - **Saturation check:** `eval/acp_metrics.py` prints health as incidents are added worst first. Report the remaining independence assumption as a limitation.
 - **Model evaluation** (`eval/risk_eval.py`, report only): sensitivity (% of bands that change when one factor moves ±20%), ablation (band counts with each factor removed: L factors left out, I1/I2/I3 set to Unknown 5 / other 4 / other 4) and Spearman agreement with an expert's ranking (`--expert ranks.csv`). `eval/unsw_validate.py` also counts **suppressed** attacks: ground-truth attacks matched only by Low or Note incidents count as missed.
 - **Weighted-sum alternative reviewed (2026-11-18):** an owner spec (since removed) proposed a 5-factor weighted sum. Not adopted: our R never collapses to zero (L is a mean, I scales attack impact by 0.5–1.0), the spec drops attack type, service and direction, and its "critical asset + severity ≥ 0.67 → High" floor would make scans of servers High (A5.2 keeps them at most Medium). Its audit fields, stable ordering and evaluation tasks were adopted above.
 - **Redesign review (2026-11-18, `docs/risk_scoring_redesign.md`):** adopted: I1 counted once (above), k^1.5 relabelled as a NetSeer heuristic, health framed as a triage index; model version A5-1.1. Not adopted: weighted-mean roll-up (it is not monotonic: one Critical incident at 0.9 plus ten Low at 0.1 averages 0.17, so more incidents would raise health), EMA alert intensity (source metrics inconsistent), a fixed lookback window instead of the half-life. Deferred: ATT&CK-breadth signal (≥3 distinct tactics on one host), a new feature needing its own spec.
+- **Aggregation review (2026-11-24, model A5-1.2, owner go-ahead):** adopted Option B and the short demo half-life; kept D. A clamped rank-sum saturates ([0.9, 0.9] → 1). Elastic-style normalisation caps one maximum incident at 38%, so health could not approach 0. No rank aggregation can keep "adding never lowers" and also guarantee "a split never raises" for identical incidents (only max() does), so the test bounds the rise of D to below 0.09.
 
 #### A5.5 Alert mix (Munir Ch.5, descriptive only)
 On the Alerts page, show nᵢ / N by classtype and by severity (the Suricata priority shown as High, Medium, Low, Info) as a scrollable horizontal bar chart titled **"Detected Alert Classes"** (with the note that shares are not risk). It never feeds the health score.
@@ -143,19 +144,19 @@ LAN 10.0.0.0/24. Server 10.0.0.5 is typed **Server** (I1 9). Workstation 10.0.0.
 
 **Incident (a): external sweep, 60 alerts, R2, ET Minor, attempted-recon, SSH on the server.**
 - L = (4 + 5.36 + 5 + 9) / 4 = **5.84** → Medium
-- A = (9 + 9) / 2 = 9; I = 3 × 1.0 = **3.0** → Medium
+- I = 3 × (0.5 + 0.5 × 9/9) = **3.0** → Medium
 - Band **Medium**; R = 10 × 0.649 × 0.333 = **2.16**
 
 **Incident (b): workstation → external C2, 12 alerts, single, ET Critical, trojan-activity, port 443.**
 - L = (9 + 3.34 + 2 + 7) / 4 = **5.34** → Medium
-- A = (6 + 6) / 2 = 6; I = 9 × 0.833 = **7.5** → High
+- I = 9 × (0.5 + 0.5 × 6/9) = **7.5** → High
 - Band **High**; R = 10 × 0.593 × 0.833 = **4.94**
 
 **Roll-up (no decay):**
 - P(server) = 0.216; P(workstation) = 0.494 (one incident each, so D = p)
-- x(b) = 0.494; x(a) = 0.216 (no asset weight: I1 is already in each R). Sorted worst first, the second term is damped by 2^1.5 = 2.828:
-- P(N) = 1 − (1 − 0.494)(1 − 0.216 / 2.828) = 1 − 0.506 × 0.924 = **0.533**
-- Health = **47**
+- Network terms: x(workstation) = 0.494 × 6/9 = 0.329; x(server) = 0.216 × 9/9 = 0.216. Sorted worst first, the second term is damped by 2^1.5 = 2.828:
+- P(N) = 1 − (1 − 0.329)(1 − 0.216 / 2.828) = 1 − 0.671 × 0.924 = **0.381**
+- Health = **62**; the 38-point drop is 32 for (b) and 6 for (a)
 
 ### A6. RAG: what is retrieved, and how
 The knowledge base lives in SQLite (`ai/kb/build_kb.py`), **built offline** once and rebuildable from Settings:
@@ -265,8 +266,8 @@ Stored in the `settings` table, with defaults from `config/netseer.toml`:
 | Aggregation gap | 300 s |
 | Correlation window | 30 min |
 | Live processing interval | 30 s |
-| Risk decay half-life | 7 days |
-| LAN CIDRs | RFC1918 (an analysis may adopt looks-local networks on top, A17) |
+| Risk decay half-life | 0.125 days (3 h, demo); 7 days for production; Settings accepts 0.01–365 |
+| LAN CIDRs | RFC1918. A **live** session uses its LAN adapter's subnet automatically unless the admin changed this list; offline captures use this list (and may adopt looks-local networks, A17) |
 | Detect attacks from inside the LAN | on (EXTERNAL_NET = any, A3); applies to the next analysis or Re-analyse |
 | Max pcap upload size | 2048 MB **per file** (any number of files; an upload is refused if free disk < 2.5 × its size) |
 | LLM backend and model | local `llama3.2:3b` / cloud with key |

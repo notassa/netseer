@@ -8,6 +8,7 @@ through the logger (ACP 1–2), then ACP 3–6 is rebuilt for the session (incid
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import subprocess
 import threading
@@ -15,7 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from netseer.src.config import analysis_lan, app_config, get_setting
+from netseer.src.config import adopt_lan, analysis_lan, app_config, get_setting, setting_defaults
 from netseer.src.database import db
 from netseer.src.engine import oui
 from netseer.src.engine.acp import run_acp
@@ -69,8 +70,27 @@ def interfaces(sys_net: Path = SYS_NET) -> list[dict]:
     return out
 
 
+def nic_subnet(name: str) -> str | None:
+    """The IPv4 subnet of one NIC (its first usable non-/32, non-link-local address), else None."""
+    try:
+        addrs = json.loads(subprocess.run(["ip", "-j", "-4", "addr"], capture_output=True, text=True).stdout or "[]")
+    except (OSError, ValueError):
+        return None
+    for entry in addrs:
+        if entry.get("ifname") != name:
+            continue
+        for info in entry.get("addr_info", []):
+            local, prefixlen = info.get("local"), info.get("prefixlen")
+            if not local or prefixlen is None or prefixlen == 32:
+                continue
+            if ipaddress.ip_address(local).is_link_local:
+                continue
+            return str(ipaddress.ip_network(f"{local}/{prefixlen}", strict=False))
+    return None
+
+
 def create_session(conn, mirror: str, lan: str, sys_net: Path = SYS_NET) -> int:
-    """Open a new live session (one analysis record per session) in waiting_interfaces."""
+    """Open a new live session (one analysis record per session) in waiting_interfaces, adopting the LAN NIC's subnet."""
     names = {n["name"]: n for n in interfaces(sys_net)}
     if mirror not in names or lan not in names:
         raise LiveError("Choose two network interfaces of this machine.")
@@ -79,9 +99,12 @@ def create_session(conn, mirror: str, lan: str, sys_net: Path = SYS_NET) -> int:
     if conn.execute("SELECT 1 FROM analyses WHERE mode = 'live' AND status IN (?, ?, ?, ?)", OPEN_STATES).fetchone():
         raise LiveError("A live session is already open; stop it first.")
     name = f"Live — {mirror} — {datetime.now(timezone.utc):%Y-%m-%d %H:%M}"
-    return conn.execute("INSERT INTO analyses(name, mode, status, created_at, mirror_if, lan_if) "
-                        "VALUES (?, 'live', 'waiting_interfaces', ?, ?, ?)",
-                        (name, db.utcnow(), mirror, lan)).lastrowid
+    sid = conn.execute("INSERT INTO analyses(name, mode, status, created_at, mirror_if, lan_if) "
+                       "VALUES (?, 'live', 'waiting_interfaces', ?, ?, ?)",
+                       (name, db.utcnow(), mirror, lan)).lastrowid
+    if get_setting(conn, "lan_cidrs") == setting_defaults()["lan_cidrs"] and (subnet := nic_subnet(lan)):
+        adopt_lan(conn, sid, [subnet])
+    return sid
 
 
 def next_state(status: str, mirror: dict | None, lan: dict | None, rx_before: int | None) -> str:

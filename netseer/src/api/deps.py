@@ -64,7 +64,7 @@ COLUMN_HELP = {
     "Event": "What happened",
     "Events": "eve.json records Suricata wrote (alerts, flows, DNS, TLS, …)",
     "Evidence": "What the value or finding is based on",
-    "Factor": "Risk factor: L1–L5 likelihood, I1–I3 impact (CONCEPTS A5.2)",
+    "Factor": "Risk factor: L1–L5 likelihood, I2–I3 impact, I1 device weight (CONCEPTS A5.2)",
     "Files": "Capture files in this analysis (merged in time order)",
     "First seen (UTC)": "Time of the first alert or packet, in UTC",
     "Flows": "Number of network flows (connections) Suricata recorded",

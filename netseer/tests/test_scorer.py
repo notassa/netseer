@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 
+from netseer.src.config import get_setting
 from netseer.src.engine import scorer
 from netseer.src.engine.acp import run_acp
 from netseer.tests.test_contextor import add_alert, conn  # noqa: F401 - fixture
@@ -17,15 +19,15 @@ SERVER, WORKSTATION = "10.0.0.5", "10.0.0.23"
 
 def test_worked_example_pure():
     La = scorer.likelihood([4, scorer.l2(60), 5, 9, None])
-    Ia = scorer.impact(9, 9, 3)
+    Ia = scorer.impact(9, 3)
     Lb = scorer.likelihood([9, scorer.l2(12), 2, 7, None])
-    Ib = scorer.impact(6, 6, 9)
+    Ib = scorer.impact(6, 9)
     assert (round(La, 2), round(Ia, 2), scorer.band(La, Ia), round(scorer.score(La, Ia), 2)) == (5.84, 3.0, "Medium", 2.16)
     assert (round(Lb, 2), round(Ib, 2), scorer.band(Lb, Ib), round(scorer.score(Lb, Ib), 2)) == (5.34, 7.5, "High", 4.94)
     p_server, p_ws = scorer.damped_union([scorer.score(La, Ia) / 10]), scorer.damped_union([scorer.score(Lb, Ib) / 10])
     assert (round(p_server, 3), round(p_ws, 3)) == (0.216, 0.494)
-    p_n, health = scorer.health([p_server, p_ws])
-    assert (round(p_n, 3), health) == (0.533, 47)
+    p_n, health = scorer.health([p_server, p_ws * 6 / 9])
+    assert (round(p_n, 3), health) == (0.381, 62)
 
 
 @pytest.mark.parametrize("x, expected", [(0, "Low"), (2.999, "Low"), (3.0, "Medium"), (5.999, "Medium"),
@@ -102,10 +104,10 @@ def test_worked_example_end_to_end(conn):  # noqa: F811
     risk = dict(conn.execute("SELECT ip, risk FROM devices").fetchall())
     assert (round(risk[SERVER], 3), round(risk[WORKSTATION], 3)) == (0.216, 0.494)
     net = scorer.network_health(conn, 1)
-    assert (round(net["p_network"], 3), net["health"]) == (0.533, 47)
+    assert (round(net["p_network"], 3), net["health"]) == (0.381, 62)
     assert [d["ip"] for d in net["top_devices"]] == [WORKSTATION, SERVER]
     assert [i["id"] for i in net["top_incidents"]] == [b["id"], a["id"]]
-    assert [i["points"] for i in net["top_incidents"]] == [47, 6]       # shares of the 53-point drop
+    assert [i["points"] for i in net["top_incidents"]] == [32, 6]       # shares of the 38-point drop
 
 
 def test_factor_meta_model_version_data_quality_and_health(conn):  # noqa: F811
@@ -115,12 +117,12 @@ def test_factor_meta_model_version_data_quality_and_health(conn):  # noqa: F811
     rows = conn.execute("SELECT * FROM incidents").fetchall()
     for r in rows:
         meta = json.loads(r["factors_json"])["_meta"]
-        assert meta["model_version"] == "A5-1.1"
+        assert meta["model_version"] == "A5-1.2"
         assert set(meta["data_quality"]) == {"unattributed_devices", "no_internal_device", "ti_checked"}
     b = conn.execute("SELECT * FROM incidents WHERE rule = 'single'").fetchone()
     assert WORKSTATION in json.loads(b["factors_json"])["_meta"]["data_quality"]["unattributed_devices"]
     net = scorer.network_health(conn, 1)
-    assert (round(net["p_network"], 3), net["health"]) == (0.533, 47)
+    assert (round(net["p_network"], 3), net["health"]) == (0.381, 62)
 
 
 def test_incidents_without_devices_still_lower_health(conn):  # noqa: F811
@@ -130,7 +132,7 @@ def test_incidents_without_devices_still_lower_health(conn):  # noqa: F811
     run_acp(conn, 1)
     inc = conn.execute("SELECT * FROM incidents").fetchone()
     assert json.loads(inc["factors_json"])["I1"]["value"] == 5
-    assert scorer.network_health(conn, 1)["health"] == round(100 * (1 - inc["score"] / 10))   # no I1 weight (A5.4)
+    assert scorer.network_health(conn, 1)["health"] == round(100 * (1 - 5 / 9 * inc["score"] / 10))   # Unknown weight (A5.4)
 
 
 def test_note_band_excluded_from_roll_up(conn):  # noqa: F811
@@ -144,6 +146,7 @@ def test_note_band_excluded_from_roll_up(conn):  # noqa: F811
 
 
 def test_older_incidents_decay(conn):  # noqa: F811
+    conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('half_life_days', '7')")
     conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) VALUES (1, ?, 'server', 9, 1)",
                  (SERVER,))
     add_alert(conn, 0, "203.0.113.9", SERVER, sid=1, priority=1, classtype="attempted-admin")
@@ -152,3 +155,47 @@ def test_older_incidents_decay(conn):  # noqa: F811
     add_alert(conn, 7 * 24 * 60, "198.51.100.200", "10.0.0.99", sid=2, priority=4)   # analysis ends 7 days later
     run_acp(conn, 1)
     assert conn.execute("SELECT risk FROM devices").fetchone()[0] == pytest.approx(fresh / 2)
+
+
+def test_split_barely_moves_device_or_network():
+    for x in (0.2, 0.5, 0.8, 0.95):
+        assert 0 <= scorer.damped_union([x, x]) - x < 0.09
+        assert scorer.damped_union([x, 0.05]) >= x
+
+
+def test_single_max_incident_on_critical_host_drives_health_to_zero(conn):  # noqa: F811
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) VALUES (1, ?, 'server', 9, 1)",
+                 (SERVER,))
+    add_alert(conn, 0, "203.0.113.9", SERVER, sid=1, priority=1, classtype="attempted-admin")
+    run_acp(conn, 1)
+    conn.execute("UPDATE incidents SET score = 9.8, band = 'Critical'")
+    assert scorer.network_health(conn, 1)["health"] == 2
+
+
+def test_criticality_weights_network_once(conn):  # noqa: F811
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) VALUES (1, ?, 'server', 9, 1)",
+                 (SERVER,))
+    add_alert(conn, 0, "203.0.113.9", SERVER, sid=1, priority=1, classtype="attempted-admin")
+    run_acp(conn, 1)
+    p_server = scorer.network_health(conn, 1)["p_network"]
+    risk_server = conn.execute("SELECT risk FROM devices").fetchone()[0]
+    conn.execute("UPDATE devices SET criticality = 3, type = 'guest' WHERE ip = ?", (SERVER,))
+    scorer.roll_up(conn, 1)
+    p_guest = scorer.network_health(conn, 1)["p_network"]
+    risk_guest = conn.execute("SELECT risk FROM devices").fetchone()[0]
+    assert p_guest == pytest.approx(p_server / 3)
+    assert risk_guest == pytest.approx(risk_server)
+
+
+def test_health_fades_without_new_alerts(conn, monkeypatch):  # noqa: F811
+    conn.execute("INSERT INTO devices(analysis_id, ip, type, criticality, attributed) VALUES (1, ?, 'server', 9, 1)",
+                 (SERVER,))
+    add_alert(conn, 0, "203.0.113.9", SERVER, sid=1, priority=1, classtype="attempted-admin")
+    run_acp(conn, 1)
+    old = scorer.network_health(conn, 1)["p_network"]
+    stored = conn.execute("SELECT risk FROM devices").fetchone()[0]
+    half_life = float(get_setting(conn, "half_life_days"))
+    end = scorer.analysis_end(conn, 1)
+    monkeypatch.setattr(scorer, "analysis_end", lambda c, aid: end + timedelta(days=half_life))
+    assert scorer.network_health(conn, 1)["p_network"] == pytest.approx(old / 2)
+    assert conn.execute("SELECT risk FROM devices").fetchone()[0] == pytest.approx(stored)

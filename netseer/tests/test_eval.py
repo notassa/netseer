@@ -20,9 +20,9 @@ def test_metrics_and_saturation(conn):  # noqa: F811
     worked_example(conn)
     run_acp(conn, 1)
     m = metrics(conn, 1)
-    assert (m["alerts"], m["groups"], m["incidents"], m["health"]) == (72, 6, 2, 47)
+    assert (m["alerts"], m["groups"], m["incidents"], m["health"]) == (72, 6, 2, 62)
     assert m["bands"]["High"] == 1 and m["bands"]["Medium"] == 1
-    assert saturation(conn, 1) == [(1, 51), (2, 47)]
+    assert saturation(conn, 1) == [(1, 67), (2, 62)]
 
 
 def test_unsw_matching(conn):  # noqa: F811
@@ -57,9 +57,9 @@ def test_sensitivity_and_ablation(conn):  # noqa: F811
     run_acp(conn, 1)
     rows = conn.execute("SELECT * FROM incidents WHERE analysis_id = 1").fetchall()
     s = sensitivity(rows)
-    assert set(s) == {"L1", "L2", "L3", "L4", "L5", "I1", "I2", "I3"}
+    assert set(s) == {"L1", "L2", "L3", "L4", "L5", "I2", "I3"}
     a = ablation(rows)
-    assert set(a) == {"L1", "L2", "L3", "L4", "L5", "I1", "I2", "I3", "baseline"}
+    assert set(a) == {"L1", "L2", "L3", "L4", "L5", "I2", "I3", "baseline"}
     stored = {b: 0 for b in BANDS}
     for row in rows:
         stored[row["band"]] += 1

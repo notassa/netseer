@@ -19,7 +19,7 @@ from netseer.src.engine.constants import (BANDS, DAMPING_P, DEVICE_TYPE, DEVICE_
                                           I3_CLASSTYPE, I3_OTHER, L1_PRIORITY, L1_SIG_SEVERITY, L3_RULE, L4_DIRECTION,
                                           LEVEL_CUTS, MATRIX, RISK_CUTS)
 
-MODEL_VERSION = "A5-1.1"        # CONCEPTS A5 risk model; bump when A5 rules change
+MODEL_VERSION = "A5-1.2"        # CONCEPTS A5 risk model; bump when A5 rules change
 
 I3_BY_CLASSTYPE = {ct: value for value, names in I3_CLASSTYPE.items() for ct in names}
 RULE_WHY = {
@@ -66,9 +66,9 @@ def likelihood(values: Iterable[float | None]) -> float:
     return sum(present) / len(present) if present else 0.0
 
 
-def impact(i1: float, i2_value: float, i3_value: float) -> float:
-    """I = I3 · (0.5 + 0.5 · A/9) with A = (I1 + I2)/2: the attack type sets the ceiling, the asset scales it."""
-    return i3_value * (0.5 + 0.5 * ((i1 + i2_value) / 2) / 9)
+def impact(i2_value: float, i3_value: float) -> float:
+    """I = I3 · (0.5 + 0.5 · I2/9): the attack type (I3) sets the ceiling, the service (I2) scales it."""
+    return i3_value * (0.5 + 0.5 * i2_value / 9)
 
 
 def level(x: float) -> str:
@@ -106,8 +106,19 @@ def damped_union(xs: Iterable[float]) -> float:
     return union(x / k ** DAMPING_P for k, x in enumerate(sorted(xs, reverse=True), 1))
 
 
+def _log_shares(xs_desc: list[float]) -> list[float]:
+    """Share of each term in the union's log-additive split: −ln(1 − x/k^1.5) over the total; inf terms split evenly."""
+    lgs = [-math.log(1 - x / k ** DAMPING_P) if x / k ** DAMPING_P < 1 else math.inf
+           for k, x in enumerate(xs_desc, 1)]
+    infs = [i for i, lg in enumerate(lgs) if math.isinf(lg)]
+    if infs:
+        return [1 / len(infs) if i in infs else 0.0 for i in range(len(lgs))]
+    total = sum(lgs)
+    return [lg / total if total else 0.0 for lg in lgs]
+
+
 def health(xs: Iterable[float]) -> tuple[float, int]:
-    """(P(N), health) from the incidents' probabilities xᵢ = pᵢ: P(N) = D(xᵢ); health = round(100·(1 − P(N)))."""
+    """(P(N), health) from the network terms xᵢ = w_d·P(d): P(N) = D(xᵢ); health = round(100·(1 − P(N)))."""
     p_n = damped_union(xs)
     return p_n, round(100 * (1 - p_n))
 
@@ -208,7 +219,7 @@ def score_incidents(conn: sqlite3.Connection, analysis_id: int) -> int:
             f["L5"] = {"value": None, "evidence": f["L5"]["evidence"] | {"reputation": l5},
                        "why": f["L5"]["why"] + ", not above L: left out (no reports is not evidence of safety)"}
         L = likelihood(f[k]["value"] for k in ("L1", "L2", "L3", "L4", "L5"))  # noqa: N806
-        I = impact(f["I1"]["value"], f["I2"]["value"], f["I3"]["value"])     # noqa: N806, E741
+        I = impact(f["I2"]["value"], f["I3"]["value"])                        # noqa: N806, E741
         updates.append((L, I, band(L, I), score(L, I), json.dumps(f), inc["id"]))
     conn.execute("BEGIN")
     conn.executemany("UPDATE incidents SET likelihood = ?, impact = ?, band = ?, score = ?, factors_json = ? "
@@ -237,7 +248,7 @@ def _scored_incidents(conn: sqlite3.Connection, analysis_id: int) -> list[tuple[
 
 
 def roll_up(conn: sqlite3.Connection, analysis_id: int) -> None:
-    """Store each device's risk P(d) (0–1): the rank-damped union of pᵢ over the non-Note incidents involving it."""
+    """Store each device's risk P(d) (0–1, unweighted): the rank-damped union of pᵢ over the non-Note incidents involving it."""
     devices = _devices(conn, analysis_id)
     ps: dict[str, list[float]] = defaultdict(list)
     for inc, p in _scored_incidents(conn, analysis_id):
@@ -264,22 +275,48 @@ def device_bands(conn: sqlite3.Connection, analysis_id: int) -> dict[str, str]:
 def network_health(conn: sqlite3.Connection, analysis_id: int) -> dict:
     """Home gauge (A5.4): P(N) and health over every non-Note incident, plus what explains the number.
 
+    Each device contributes one term x = w_d·P(d) with w_d = I1/9; an incident with no internal device is an
+    Unknown-weight term. P(N) = D over those terms. It is a triage index, not a probability of compromise.
+
     `top_incidents` are the 3 incidents that cost the most health `points`. The drop (100 − health) is shared out
     in proportion to −ln(1 − x_(k)/k^1.5), the log-additive split of the product, so the points add up to the drop.
     `top_devices` are the 3 devices with the largest w_d·P(d).
     """
-    scored = sorted(_scored_incidents(conn, analysis_id), key=lambda t: -t[1])   # I1 is already in each R (A5.4)
-    xs = [x for _, x in scored]
-    p_n, value = health(xs)
-    logs = [-math.log(1 - x / k ** DAMPING_P) if x / k ** DAMPING_P < 1 else math.inf for k, x in enumerate(xs, 1)]
-    total = sum(logs) or 1.0
-    costs = [{"id": inc["id"], "title": inc["title"], "band": inc["band"], "x": x,
-              "points": round((100 - value) * (lg / total if math.isfinite(total) else float(math.isinf(lg))))}
-             for (inc, x), lg in zip(scored, logs)]
+    scored = sorted(_scored_incidents(conn, analysis_id), key=lambda t: -t[1])   # decayed FRESH on every call
     rows = conn.execute("SELECT ip, hostname, type, criticality, risk FROM devices WHERE analysis_id = ?",
                         (analysis_id,)).fetchall()
-    devices = sorted(({"ip": r["ip"], "hostname": r["hostname"], "type": r["type"], "risk": r["risk"],
-                       "weight": r["criticality"] / 9, "contribution": r["criticality"] / 9 * r["risk"]}
-                      for r in rows), key=lambda d: -d["contribution"])
-    return {"p_network": p_n, "health": value, "n_scored": len(xs), "top_incidents": costs[:3],
-            "top_devices": [d for d in devices[:3] if d["contribution"] > 0], "xs": sorted(xs, reverse=True)}
+    by_ip = {r["ip"]: r for r in rows}
+    members: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    terms: list[tuple[float, list[tuple[int, float]]]] = []
+    for j, (inc, p) in enumerate(scored):
+        ips = (set(json.loads(inc["src_ips_json"])) | set(json.loads(inc["dest_ips_json"]))) & by_ip.keys()
+        if ips:
+            for ip in ips:
+                members[ip].append((j, p))
+        else:
+            terms.append((DEVICE_TYPE["unknown"] / 9 * p, [(j, 1.0)]))
+    for ip in sorted(members):
+        ps = [p for _, p in members[ip]]              # scored is descending, so ps is too
+        risk = damped_union(ps)
+        weight = by_ip[ip]["criticality"] / 9
+        terms.append((weight * risk, list(zip([j for j, _ in members[ip]], _log_shares(ps)))))
+    terms.sort(key=lambda t: -t[0])
+    xs = [x for x, _ in terms]
+    p_n, value = health(xs)
+    term_shares = _log_shares(xs)
+    points: dict[int, float] = defaultdict(float)
+    for (x, parts), term_share in zip(terms, term_shares):
+        for j, part_share in parts:
+            points[j] += (100 - value) * term_share * part_share
+    ranked = sorted(range(len(scored)), key=lambda j: -points[j])
+    top_incidents = [{"id": scored[j][0]["id"], "title": scored[j][0]["title"], "band": scored[j][0]["band"],
+                      "x": scored[j][1], "points": round(points[j])} for j in ranked[:3]]
+    devices = []
+    for r in rows:
+        risk = damped_union([p for _, p in members.get(r["ip"], [])])
+        weight = r["criticality"] / 9
+        devices.append({"ip": r["ip"], "hostname": r["hostname"], "type": r["type"],
+                        "risk": risk, "weight": weight, "contribution": weight * risk})
+    devices.sort(key=lambda d: -d["contribution"])
+    return {"p_network": p_n, "health": value, "n_scored": len(scored), "top_incidents": top_incidents,
+            "top_devices": [d for d in devices[:3] if d["contribution"] > 0], "xs": xs}

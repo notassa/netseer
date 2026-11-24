@@ -8,6 +8,7 @@ import os
 import pytest
 
 from netseer.src.database import db
+from netseer.src.config import analysis_lan, setting_defaults
 from netseer.src.engine import ingest, live
 from netseer.tests.test_auth import admin_client, csrf  # noqa: F401 - fixture
 from netseer.tests.test_contextor import conn  # noqa: F401 - fixture
@@ -51,6 +52,39 @@ def test_session_record_and_nic_choice(conn, sys_net):  # noqa: F811
     assert row["name"].startswith("Live — mirror0 — ")
     with pytest.raises(live.LiveError, match="already open"):
         live.create_session(conn, "mirror0", "eno1", sys_net)
+
+
+def test_create_session_adopts_lan_subnet_by_default(conn, sys_net, monkeypatch):  # noqa: F811
+    conn.execute("DELETE FROM settings WHERE key = 'lan_cidrs'")
+    monkeypatch.setattr(live, "nic_subnet", lambda name: "192.168.100.0/24")
+    sid = live.create_session(conn, "mirror0", "eno1", sys_net)
+    assert analysis_lan(conn, sid) == ["192.168.100.0/24"]
+
+
+def test_custom_lan_list_wins_over_detected_subnet(conn, sys_net, monkeypatch):  # noqa: F811
+    conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES('lan_cidrs', '[\"10.0.0.0/24\"]')")
+    monkeypatch.setattr(live, "nic_subnet", lambda name: "192.168.100.0/24")
+    sid = live.create_session(conn, "mirror0", "eno1", sys_net)
+    assert analysis_lan(conn, sid) == ["10.0.0.0/24"]
+
+
+def test_no_detected_subnet_keeps_default_list(conn, sys_net, monkeypatch):  # noqa: F811
+    conn.execute("DELETE FROM settings WHERE key = 'lan_cidrs'")
+    monkeypatch.setattr(live, "nic_subnet", lambda name: None)
+    sid = live.create_session(conn, "mirror0", "eno1", sys_net)
+    assert analysis_lan(conn, sid) == setting_defaults()["lan_cidrs"]
+
+
+def test_nic_subnet_parses_ip_json(monkeypatch):
+    stdout = json.dumps([
+        {"ifname": "eno1", "addr_info": [{"local": "192.168.100.24", "prefixlen": 24}]},
+        {"ifname": "p2p0", "addr_info": [{"local": "10.0.0.1", "prefixlen": 32}]},
+        {"ifname": "veth0", "addr_info": [{"local": "169.254.10.10", "prefixlen": 16}]},
+    ])
+    monkeypatch.setattr(live.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": stdout})())
+    assert live.nic_subnet("eno1") == "192.168.100.0/24"
+    assert live.nic_subnet("p2p0") is None
+    assert live.nic_subnet("veth0") is None
 
 
 def test_stall_states_follow_the_links_and_traffic(conn, sys_net, tmp_path):  # noqa: F811

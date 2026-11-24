@@ -35,7 +35,7 @@ def metrics(conn: sqlite3.Connection, analysis_id: int) -> dict:
 
 
 def saturation(conn: sqlite3.Connection, analysis_id: int) -> list[tuple[int, int]]:
-    """Health as scored incidents are added worst first: shows how the rank-damped union levels off."""
+    """Health as network terms are added worst first: shows how the rank-damped union levels off."""
     xs = network_health(conn, analysis_id)["xs"]
     return [(k, health(xs[:k])[1]) for k in range(1, len(xs) + 1)]
 

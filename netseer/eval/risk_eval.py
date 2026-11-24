@@ -25,8 +25,8 @@ from netseer.src.database import db
 from netseer.src.engine.constants import BANDS
 from netseer.src.engine.scorer import band, impact, likelihood
 
-FACTORS = ("L1", "L2", "L3", "L4", "L5", "I1", "I2", "I3")
-_NEUTRAL = {"I1": 5, "I2": 4, "I3": 4}   # Unknown / other / other (CONCEPTS A5.2)
+FACTORS = ("L1", "L2", "L3", "L4", "L5", "I2", "I3")
+_NEUTRAL = {"I2": 4, "I3": 4}   # other / other (CONCEPTS A5.2)
 
 
 def _parsed(row: sqlite3.Row) -> dict:
@@ -34,9 +34,9 @@ def _parsed(row: sqlite3.Row) -> dict:
 
 
 def recompute(factors: dict) -> str:
-    """Band from the stored factor values: L = mean of L1..L5 present, I = impact(I1, I2, I3)."""
+    """Band from the stored factor values: L = mean of L1..L5 present, I = impact(I2, I3)."""
     L = likelihood(factors[k]["value"] for k in ("L1", "L2", "L3", "L4", "L5"))  # noqa: N806
-    I = impact(factors["I1"]["value"], factors["I2"]["value"], factors["I3"]["value"])  # noqa: E741, N806
+    I = impact(factors["I2"]["value"], factors["I3"]["value"])  # noqa: E741, N806
     return band(L, I)
 
 
@@ -70,7 +70,7 @@ def _histogram(bands: list[str]) -> dict[str, int]:
 
 
 def ablation(rows: list[sqlite3.Row]) -> dict[str, dict[str, int]]:
-    """Band histogram per factor ablated (L set None, I1 5, I2 4, I3 4) plus the baseline over stored values."""
+    """Band histogram per factor ablated (L set None, I2 4, I3 4) plus the baseline over stored values."""
     result = {"baseline": _histogram([recompute(_parsed(r)) for r in rows])}
     for k in FACTORS:
         bands = []

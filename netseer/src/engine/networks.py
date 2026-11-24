@@ -172,7 +172,7 @@ def discover(conn: sqlite3.Connection, analysis_id: int, evidence: NetEvidence |
     for n in nets:
         n.hosts |= {ip for ip in devices if _v4(ip) in n.prefix}
         if any(n.prefix.subnet_of(a) for a in adopted):
-            n.evidence.append("adopted as LAN for this analysis because it looked local")
+            n.evidence.append("adopted as LAN for this analysis (it looked local, or is the live LAN adapter's subnet)")
     in_lan = lambda n: any(n.prefix.subnet_of(l) for l in lan if l.version == 4)  # noqa: E731
     return sorted(nets, key=lambda n: (not in_lan(n), CONFIDENCE.index(n.confidence), n.prefix))
 
